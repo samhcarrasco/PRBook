@@ -1,35 +1,42 @@
 import React, { useState, useEffect } from 'react';
+import { Dimensions } from 'react-native';
 import GhostTextInput from './ghost-text';
 import { 
   View, 
-  Text, 
-  TextInput, 
   TouchableOpacity, 
-  FlatList, 
-  StyleSheet 
+  StyleSheet,
+  Alert 
 } from 'react-native';
 import { openDB, workoutTypeOperations } from '../db/db';
+
+const { width } = Dimensions.get('window');
 
 const WorkoutCard = ({ date }) => {
   const [db, setDb] = useState(null);
   const [workoutName, setWorkoutName] = useState('');
   const [suggestions, setSuggestions] = useState([]);
-  const [showSuggestions, setShowSuggestions] = useState(false);
 
   useEffect(() => {
     const initDB = async () => {
       const database = await openDB();
+      console.log('Database set in state:', database);
       setDb(database);
     };
     initDB();
   }, []);
 
+  useEffect(() => {
+    if (db) {
+      handleInputFocus();
+    }
+  }, [db]);
+
   const handleInputFocus = async () => {
     if (!db) return;
     try {
       const allWorkouts = await workoutTypeOperations.getWorkoutTypes(db);
+      console.log('All Workouts:', allWorkouts);
       setSuggestions(allWorkouts);
-      setShowSuggestions(true);
     } catch (error) {
       console.error('Error loading workouts:', error);
     }
@@ -47,7 +54,6 @@ const WorkoutCard = ({ date }) => {
         const allWorkouts = await workoutTypeOperations.getWorkoutTypes(db);
         setSuggestions(allWorkouts);
       }
-      setShowSuggestions(true);
     } catch (error) {
       console.error('Error searching workouts:', error);
       setSuggestions([]);
@@ -56,11 +62,15 @@ const WorkoutCard = ({ date }) => {
 
   const saveWorkoutType = async () => {
     if (!workoutName.trim() || !db) return;
-
+  
     try {
       await workoutTypeOperations.addWorkoutType(db, workoutName.trim());
+      
+      const allWorkouts = await workoutTypeOperations.getWorkoutTypes(db);
+      console.log('Refreshed Workouts:', allWorkouts);
+      setSuggestions(allWorkouts);
+      
       setWorkoutName('');
-      setShowSuggestions(false);
     } catch (error) {
       if (error.message.includes('already exists')) {
         alert('This workout already exists!');
@@ -70,55 +80,94 @@ const WorkoutCard = ({ date }) => {
     }
   };
 
+  const deleteWorkoutType = async () => {
+    if (!workoutName.trim() || !db) return;
+  
+    Alert.alert(
+      'Delete Workout',
+      `Are you sure you want to delete "${workoutName}"?`,
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await workoutTypeOperations.deleteWorkoutType(db, workoutName.trim());
+              
+              const allWorkouts = await workoutTypeOperations.getWorkoutTypes(db);
+              console.log('Refreshed Workouts:', allWorkouts);
+              setSuggestions(allWorkouts);
+              
+              setWorkoutName('');
+            } catch (error) {
+              console.error('Error deleting workout:', error);
+              Alert.alert('Error', 'Could not delete the workout');
+            }
+          },
+        },
+      ]
+    );
+  };
+
   return (
     <View style={styles.container}>
-      <View style={styles.inputContainer}>
-        <GhostTextInput
+      <View style={styles.inputButtonWrapper}>
+        <View style={styles.inputContainer}>
+          <GhostTextInput
             style={styles.input}
             value={workoutName}
             onChangeText={handleWorkoutNameChange}
             onFocus={handleInputFocus}
             suggestions={suggestions}
             placeholder="Enter workout name"
+            placeholderTextColor="#888"
             autoCapitalize="words"
-        />
-        <TouchableOpacity 
-          style={styles.addButton}
-          onPress={saveWorkoutType}
-        >
-          <Text style={styles.buttonText}>+</Text>
-        </TouchableOpacity>
-      </View>
-
-      {showSuggestions && suggestions.length > 0 && (
-        <View style={styles.suggestionsContainer}>
-          <FlatList
-            data={suggestions}
-            keyExtractor={(item) => item.id.toString()}
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                style={styles.suggestionItem}
-                onPress={() => {
-                  setWorkoutName(item.name);
-                  setShowSuggestions(false);
-                }}
-              >
-                <Text>{item.name}</Text>
-              </TouchableOpacity>
-            )}
           />
         </View>
-      )}
+        <View style={styles.buttonsContainer}>
+          <TouchableOpacity 
+            style={styles.actionButton}
+            onPress={saveWorkoutType}
+          >
+            <View style={styles.buttonContent}>
+              <View style={styles.plusHorizontal}/>
+              <View style={styles.plusVertical}/>
+            </View>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.actionButton, styles.deleteButton]}
+            onPress={deleteWorkoutType}
+          >
+            <View style={styles.buttonContent}>
+              <View style={styles.minusHorizontal}/>
+            </View>
+          </TouchableOpacity>
+        </View>
+      </View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    alignItems: 'center',
+    position: 'relative',
+  top: -420,
+  },
+  inputButtonWrapper: {
+    width: width - 32,
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: 'white',
-    borderRadius: 8,
-    padding: 16,
-    margin: 8,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -126,42 +175,60 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flex: 1,
+    marginRight: 10,
   },
   input: {
-    flex: 1,
-    height: 40,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    marginRight: 8,
+    height: 50,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 10,
+    paddingHorizontal: 15,
+    fontSize: 16,
   },
-  addButton: {
+  buttonsContainer: {
+    flexDirection: 'row',
+  },
+  actionButton: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
     backgroundColor: '#3498db',
-    width: 40,
-    height: 40,
-    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
+    marginLeft: 10,
   },
-  buttonText: {
-    color: 'white',
-    fontSize: 24,
+  deleteButton: {
+    backgroundColor: '#e74c3c',
   },
-  suggestionsContainer: {
-    marginTop: 8,
-    maxHeight: 200,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
+  buttonContent: {
+    position: 'relative',
+    width: 20,
+    height: 20,
   },
-  suggestionItem: {
-    padding: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+  plusHorizontal: {
+    position: 'absolute',
+    width: 20,
+    height: 2,
+    backgroundColor: 'white',
+    top: 9,
+    left: 0,
   },
+  plusVertical: {
+    position: 'absolute',
+    width: 2,
+    height: 20,
+    backgroundColor: 'white',
+    top: 0,
+    left: 9,
+  },
+  minusHorizontal: {
+    position: 'absolute',
+    width: 20,
+    height: 2,
+    backgroundColor: 'white',
+    top: 9,
+    left: 0,
+  }
 });
 
 export default WorkoutCard;
