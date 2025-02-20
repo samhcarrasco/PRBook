@@ -8,6 +8,7 @@ import {
   Alert 
 } from 'react-native';
 import { openDB, workoutTypeOperations } from '../db/db';
+import { useWorkout } from '../context/workoutcontext';
 
 const { width } = Dimensions.get('window');
 
@@ -15,6 +16,7 @@ const WorkoutCard = ({ date }) => {
   const [db, setDb] = useState(null);
   const [workoutName, setWorkoutName] = useState('');
   const [suggestions, setSuggestions] = useState([]);
+  const { refreshWorkoutList } = useWorkout();
 
   useEffect(() => {
     const initDB = async () => {
@@ -70,6 +72,7 @@ const WorkoutCard = ({ date }) => {
       console.log('Refreshed Workouts:', allWorkouts);
       setSuggestions(allWorkouts);
       
+      refreshWorkoutList();
       setWorkoutName('');
     } catch (error) {
       if (error.message.includes('already exists')) {
@@ -102,6 +105,7 @@ const WorkoutCard = ({ date }) => {
               console.log('Refreshed Workouts:', allWorkouts);
               setSuggestions(allWorkouts);
               
+              refreshWorkoutList();
               setWorkoutName('');
             } catch (error) {
               console.error('Error deleting workout:', error);
@@ -158,7 +162,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     alignItems: 'center',
     position: 'relative',
-  top: -420,
+    top: 250,
   },
   inputButtonWrapper: {
     width: width - 32,
