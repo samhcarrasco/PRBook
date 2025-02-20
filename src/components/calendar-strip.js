@@ -6,7 +6,7 @@ import moment from 'moment';
 const { width } = Dimensions.get('window');
 const DAY_WIDTH = width / 7;
 
-const WeeklyCalendar = () => {
+const WeeklyCalendar = ({ onDateSelect }) => {
   const [selectedDate, setSelectedDate] = useState(moment());
   const [isDatePickerVisible, setDatePickerVisible] = useState(false);
   const flatListRef = useRef(null);
@@ -20,9 +20,16 @@ const WeeklyCalendar = () => {
     return days;
   };
 
+  const handleDateSelection = (date) => {
+    setSelectedDate(date);
+    if (onDateSelect) {
+      onDateSelect(date.toDate());
+    }
+  };
+
   const handleWeekChange = (direction) => {
     const newDate = moment(selectedDate).add(direction, 'weeks');
-    setSelectedDate(newDate);
+    handleDateSelection(newDate);
   };
 
   const showDatePicker = () => {
@@ -34,7 +41,7 @@ const WeeklyCalendar = () => {
   };
 
   const handleConfirm = (date) => {
-    setSelectedDate(moment(date));
+    handleDateSelection(moment(date));
     hideDatePicker();
   };
 
@@ -44,7 +51,7 @@ const WeeklyCalendar = () => {
     return (
       <TouchableOpacity
         style={[styles.dayContainer, isSelected && styles.selectedDayContainer]}
-        onPress={() => setSelectedDate(moment(item))}
+        onPress={() => handleDateSelection(moment(item))}
       >
         <Text style={[styles.dayName, isSelected && styles.selectedText]}>
           {item.format('ddd')}
@@ -124,7 +131,11 @@ const WeeklyCalendar = () => {
 
 const styles = StyleSheet.create({
   parentContainer: {
-    flex: 1,
+    position: 'absolute',
+    top: 50,
+    left: 0,
+    right: 0,
+    zIndex: 10,
   },
   topSpace: {
     flex: 0.3,

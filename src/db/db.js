@@ -15,46 +15,67 @@ const initDatabase = async () => {
   try {
     const db = await openDB();
     
-    try {
-      await db.execAsync(`
-        CREATE TABLE IF NOT EXISTS workout_types (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          name TEXT UNIQUE NOT NULL
-        );
-      `);
-      console.log('Workout types table created successfully');
-    } catch (tableError) {
-      console.error('Error creating workout_types table:', tableError);
-    }
+    const createTables = async () => {
+      await Promise.all([
+        db.execAsync(`
+          CREATE TABLE IF NOT EXISTS workout_types (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT UNIQUE NOT NULL
+          );
+        `).then(() => console.log('Workout types table created successfully'))
+          .catch(error => console.error('Error creating workout_types table:', error)),
 
-    try {
-      await db.execAsync(`
-        CREATE TABLE IF NOT EXISTS daily_workouts (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          date TEXT NOT NULL,
-          workout_type_id INTEGER,
-          FOREIGN KEY (workout_type_id) REFERENCES workout_types (id)
-        );
-      `);
-      console.log('Daily workouts table created successfully');
-    } catch (tableError) {
-      console.error('Error creating daily_workouts table:', tableError);
-    }
+        db.execAsync(`
+          CREATE TABLE IF NOT EXISTS daily_workouts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            date TEXT NOT NULL,
+            workout_type_id INTEGER,
+            FOREIGN KEY (workout_type_id) REFERENCES workout_types (id)
+          );
+        `).then(() => console.log('Daily workouts table created successfully'))
+          .catch(error => console.error('Error creating daily_workouts table:', error)),
 
-    try {
-      await db.execAsync(`
-        CREATE TABLE IF NOT EXISTS workout_sets (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          daily_workout_id INTEGER,
-          set_number INTEGER,
-          reps INTEGER,
-          FOREIGN KEY (daily_workout_id) REFERENCES daily_workouts (id)
-        );
-      `);
-      console.log('Workout sets table created successfully');
-    } catch (tableError) {
-      console.error('Error creating workout_sets table:', tableError);
-    }
+        db.execAsync(`
+          CREATE TABLE IF NOT EXISTS workout_sets (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            daily_workout_id INTEGER,
+            set_number INTEGER,
+            reps INTEGER,
+            weight TEXT,
+            FOREIGN KEY (daily_workout_id) REFERENCES daily_workouts (id)
+          );
+        `).then(() => console.log('Workout sets table created successfully'))
+          .catch(error => console.error('Error creating workout_sets table:', error))
+      ]);
+    };
+
+    const migrateDatabaseSchema = async () => {
+      try {
+        const columns = await db.getAllAsync("PRAGMA table_info(workout_sets);");
+        
+        const hasWeightColumn = columns.some(col => col.name === 'weight');
+        
+        if (!hasWeightColumn) {
+          try {
+            await db.execAsync(`
+              BEGIN TRANSACTION;
+              ALTER TABLE workout_sets ADD COLUMN weight TEXT;
+              COMMIT;
+            `);
+            console.log('Successfully added weight column to workout_sets table');
+          } catch (addColumnError) {
+            console.warn('Error adding weight column:', addColumnError);
+            await db.execAsync('ROLLBACK;');
+          }
+        }
+      } catch (migrationError) {
+        console.error('Schema migration failed:', migrationError);
+        throw migrationError;
+      }
+    };
+
+    await createTables();
+    await migrateDatabaseSchema();
     
     try {
       const tableInfo = await db.getAllAsync("PRAGMA table_info(workout_types);");
