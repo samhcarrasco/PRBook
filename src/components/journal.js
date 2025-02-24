@@ -8,7 +8,10 @@ import {
   Dimensions,
   Alert,
   ActivityIndicator,
-  FlatList
+  FlatList,
+  Keyboard,
+  Animated,
+  Platform
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import { openDB, workoutTypeOperations } from '../db/db';
@@ -26,6 +29,40 @@ const Journal = ({ date }) => {
   const [savedWorkouts, setSavedWorkouts] = useState([]);
   const [showPicker, setShowPicker] = useState(false);
   const { workoutListVersion } = useWorkout();
+  const [keyboardHeight] = useState(new Animated.Value(0));
+
+  // Keyboard event listeners
+  useEffect(() => {
+    const keyboardWillShow = (event) => {
+      Animated.timing(keyboardHeight, {
+        duration: Platform.OS === 'ios' ? event.duration : 250,
+        toValue: event.endCoordinates.height,
+        useNativeDriver: false,
+      }).start();
+    };
+
+    const keyboardWillHide = (event) => {
+      Animated.timing(keyboardHeight, {
+        duration: Platform.OS === 'ios' ? event.duration : 250,
+        toValue: 0,
+        useNativeDriver: false,
+      }).start();
+    };
+
+    // Use different events for iOS and Android
+    const showListener = Platform.OS === 'ios' 
+      ? Keyboard.addListener('keyboardWillShow', keyboardWillShow)
+      : Keyboard.addListener('keyboardDidShow', keyboardWillShow);
+      
+    const hideListener = Platform.OS === 'ios'
+      ? Keyboard.addListener('keyboardWillHide', keyboardWillHide)
+      : Keyboard.addListener('keyboardDidHide', keyboardWillHide);
+
+    return () => {
+      showListener.remove();
+      hideListener.remove();
+    };
+  }, [keyboardHeight]);
 
   useEffect(() => {
     const initDB = async () => {
@@ -50,7 +87,6 @@ const Journal = ({ date }) => {
       }
     }
   }, [db, date, workoutListVersion]);
-
   const loadWorkoutTypes = async () => {
     if (!db) return;
     
@@ -180,6 +216,7 @@ const Journal = ({ date }) => {
       setSaving(false);
     }
   };
+
   const deleteWorkout = async (dailyWorkoutId) => {
     if (!db) return;
     
@@ -218,7 +255,6 @@ const Journal = ({ date }) => {
       ]
     );
   };
-
   const renderJournalContent = () => {
     return (
       <>
@@ -249,7 +285,6 @@ const Journal = ({ date }) => {
             </View>
           )}
           
-          {/* Sets only appear when workout is selected */}
           {selectedWorkout ? (
             <>
               {sets.map((set, index) => (
@@ -286,7 +321,6 @@ const Journal = ({ date }) => {
                 </View>
               ))}
               
-              {/* Add Set Button */}
               <TouchableOpacity
                 style={styles.addSetButton}
                 onPress={addSet}
@@ -295,7 +329,6 @@ const Journal = ({ date }) => {
                 <Text style={styles.addSetButtonText}>+ Add Set</Text>
               </TouchableOpacity>
               
-              {/* Save Button */}
               <TouchableOpacity
                 style={[styles.saveButton, saving && styles.savingButton]}
                 onPress={saveWorkout}
@@ -309,7 +342,6 @@ const Journal = ({ date }) => {
           ) : null}
         </View>
         
-        {/* Saved Workouts Section */}
         {savedWorkouts.length > 0 && (
           <View style={styles.savedWorkoutsContainer}>
             <Text style={styles.sectionTitle}>Today's Workouts</Text>
@@ -360,11 +392,22 @@ const Journal = ({ date }) => {
   }
 
   return (
-    <View style={styles.container}>
+    <Animated.View 
+      style={[
+        styles.container,
+        {
+          transform: [{
+            translateY: keyboardHeight.interpolate({
+              inputRange: [0, height],
+              outputRange: [0, -height],
+            })
+          }]
+        }
+      ]}
+    >
       <View style={styles.journalContainer}>
         <Text style={styles.headerText}>Workout Journal</Text>
         
-        {/* FlatList implementation instead of ScrollView */}
         <FlatList
           data={[{ key: 'journal_content' }]}
           renderItem={() => renderJournalContent()}
@@ -379,7 +422,6 @@ const Journal = ({ date }) => {
         />
       </View>
       
-      {/* Picker rendered outside for better interaction */}
       {showPicker && (
         <View style={styles.pickerOverlay}>
           <View style={styles.pickerContainer}>
@@ -415,7 +457,7 @@ const Journal = ({ date }) => {
           </View>
         </View>
       )}
-    </View>
+    </Animated.View>
   );
 };
 
@@ -454,75 +496,14 @@ const styles = StyleSheet.create({
   scrollContentContainer: {
     paddingBottom: 20,
   },
+  addWorkoutContainer: {
+    marginTop: 10,
+  },
   sectionTitle: {
     fontSize: 16,
     fontWeight: '600',
     color: '#34495e',
     marginBottom: 10,
-  },
-  savedWorkoutsContainer: {
-    marginTop: 20,
-  },
-  savedWorkoutCard: {
-    backgroundColor: '#f5f6fa',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 10,
-  },
-  savedWorkoutHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  savedWorkoutName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#2c3e50',
-  },
-  deleteButton: {
-    backgroundColor: '#e74c3c',
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: 4,
-  },
-  deleteButtonText: {
-    color: 'white',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  setsTable: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 4,
-    overflow: 'hidden',
-  },
-  setsTableHeader: {
-    flexDirection: 'row',
-    backgroundColor: '#ecf0f1',
-    paddingVertical: 8,
-  },
-  setsTableRow: {
-    flexDirection: 'row',
-    borderTopWidth: 1,
-    borderTopColor: '#ddd',
-  },
-  setsTableCell: {
-    paddingVertical: 8,
-    paddingHorizontal: 4,
-    textAlign: 'center',
-  },
-  setNumberCell: {
-    flex: 1,
-  },
-  weightCell: {
-    flex: 2,
-  },
-  repsCell: {
-    flex: 2,
-  },
-  addWorkoutContainer: {
-    marginTop: 10,
   },
   workoutSelectorButton: {
     backgroundColor: '#f9f9f9',
@@ -535,53 +516,6 @@ const styles = StyleSheet.create({
   workoutSelectorText: {
     color: '#777',
     fontSize: 16,
-  },
-  pickerOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 2000,
-  },
-  pickerContainer: {
-    width: '90%',
-    backgroundColor: 'white',
-    borderRadius: 10,
-    overflow: 'hidden',
-    elevation: 5,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-  },
-  pickerHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-    backgroundColor: '#f8f9fa',
-  },
-  pickerTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#2c3e50',
-  },
-  closeButton: {
-    padding: 5,
-  },
-  closeButtonText: {
-    fontSize: 16,
-    color: '#e74c3c',
-    fontWeight: 'bold',
-  },
-  picker: {
-    height: 200,
   },
   selectedWorkoutContainer: {
     flexDirection: 'row',
@@ -672,6 +606,114 @@ const styles = StyleSheet.create({
     color: 'white',
     fontWeight: '600',
     fontSize: 16,
+  },
+  savedWorkoutsContainer: {
+    marginTop: 20,
+  },
+  savedWorkoutCard: {
+    backgroundColor: '#f5f6fa',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 10,
+  },
+  savedWorkoutHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  savedWorkoutName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#2c3e50',
+  },
+  deleteButton: {
+    backgroundColor: '#e74c3c',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 4,
+  },
+  deleteButtonText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  setsTable: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  setsTableHeader: {
+    flexDirection: 'row',
+    backgroundColor: '#ecf0f1',
+    paddingVertical: 8,
+  },
+  setsTableRow: {
+    flexDirection: 'row',
+    borderTopWidth: 1,
+    borderTopColor: '#ddd',
+  },
+  setsTableCell: {
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    textAlign: 'center',
+  },
+  setNumberCell: {
+    flex: 1,
+  },
+  weightCell: {
+    flex: 2,
+  },
+  repsCell: {
+    flex: 2,
+  },
+  pickerOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 2000,
+  },
+  pickerContainer: {
+    width: '90%',
+    backgroundColor: 'white',
+    borderRadius: 10,
+    overflow: 'hidden',
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  pickerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+    backgroundColor: '#f8f9fa',
+  },
+  pickerTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#2c3e50',
+  },
+  closeButton: {
+    padding: 5,
+  },
+  closeButtonText: {
+    fontSize: 16,
+    color: '#e74c3c',
+    fontWeight: 'bold',
+  },
+  picker: {
+    height: 200,
   },
 });
 
