@@ -27,20 +27,20 @@ export default function App() {
 
   return (
     <WorkoutProvider>
-    <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-      <View style={{ flex: 1, backgroundColor: '#000' }}>
-        {/* Calendar goes at top with padding */}
+      <View 
+        style={{ flex: 1, backgroundColor: '#000' }}
+        onStartShouldSetResponder={() => {
+          Keyboard.dismiss();
+          return false;
+        }}
+        onMoveShouldSetResponder={() => false}
+      >
         <View style={{ paddingTop: 50 }}>
           <WeeklyCalendar onDateSelect={setSelectedDate} />
         </View>
-        
-        {/* WorkoutCard stays as is - let it handle its own positioning */}
         <WorkoutCard date={selectedDate} />
-        
-        {/* Journal is absolutely positioned at bottom */}
         <Journal date={selectedDate} />
       </View>
-    </TouchableWithoutFeedback>
     </WorkoutProvider>
   );
 }
