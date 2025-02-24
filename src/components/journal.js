@@ -30,8 +30,9 @@ const Journal = ({ date }) => {
   const [showPicker, setShowPicker] = useState(false);
   const { workoutListVersion } = useWorkout();
   const [keyboardHeight] = useState(new Animated.Value(0));
+  const [editingWorkoutId, setEditingWorkoutId] = useState(null);
+  const [originalSets, setOriginalSets] = useState([]);
 
-  // Keyboard event listeners
   useEffect(() => {
     const keyboardWillShow = (event) => {
       Animated.timing(keyboardHeight, {
@@ -49,7 +50,6 @@ const Journal = ({ date }) => {
       }).start();
     };
 
-    // Use different events for iOS and Android
     const showListener = Platform.OS === 'ios' 
       ? Keyboard.addListener('keyboardWillShow', keyboardWillShow)
       : Keyboard.addListener('keyboardDidShow', keyboardWillShow);
@@ -152,12 +152,26 @@ const Journal = ({ date }) => {
     setSets([...sets, { id: newId, weight: '', reps: '' }]);
   };
 
-  const removeSet = (id) => {
+  const removeSet = async (id) => {
     if (sets.length === 1) {
-      setSets([{ id: 1, weight: '', reps: '' }]);
+      Alert.alert('Error', 'At least one set is required');
       return;
     }
-    
+  
+    if (editingWorkoutId) {
+      const setToDelete = originalSets.find(set => set.id === id);
+      if (setToDelete) {
+        try {
+          await db.runAsync(
+            'DELETE FROM workout_sets WHERE id = ?',
+            [setToDelete.id]
+          );
+        } catch (error) {
+          console.error('Error deleting set:', error);
+        }
+      }
+    }
+  
     setSets(sets.filter(set => set.id !== id));
   };
 
@@ -167,51 +181,75 @@ const Journal = ({ date }) => {
     ));
   };
 
+  const editWorkout = (workout) => {
+    setSelectedWorkout(workout.workout_name);
+    setSets(workout.sets.map(set => ({
+      id: set.id,
+      weight: set.weight.toString(),
+      reps: set.reps.toString()
+    })));
+    setOriginalSets(workout.sets);
+    setEditingWorkoutId(workout.daily_workout_id);
+    setShowPicker(false);
+  };
+
   const saveWorkout = async () => {
     if (!db || !date || !selectedWorkout || sets.length === 0) {
       Alert.alert('Error', 'Please select a workout and add at least one set');
       return;
     }
-    
+
     const invalidSets = sets.filter(set => !set.weight || !set.reps);
     if (invalidSets.length > 0) {
       Alert.alert('Error', 'Please enter weight and reps for all sets');
       return;
     }
-    
+
     try {
       setSaving(true);
       const formattedDate = formatDate(date);
-      
       const workoutType = workoutTypes.find(wt => wt.name === selectedWorkout);
-      if (!workoutType) {
-        throw new Error('Selected workout type not found');
-      }
-      
-      const dailyWorkoutResult = await db.runAsync(
-        'INSERT INTO daily_workouts (date, workout_type_id) VALUES (?, ?)',
-        [formattedDate, workoutType.id]
-      );
-      
-      const dailyWorkoutId = dailyWorkoutResult.lastInsertRowId;
-      
-      for (let i = 0; i < sets.length; i++) {
-        const set = sets[i];
+
+      if (!workoutType) throw new Error('Selected workout type not found');
+
+      if (editingWorkoutId) {
         await db.runAsync(
-          'INSERT INTO workout_sets (daily_workout_id, set_number, weight, reps) VALUES (?, ?, ?, ?)',
-          [dailyWorkoutId, i + 1, set.weight, set.reps]
+          'DELETE FROM workout_sets WHERE daily_workout_id = ?',
+          [editingWorkoutId]
         );
+
+        for (let i = 0; i < sets.length; i++) {
+          const set = sets[i];
+          await db.runAsync(
+            'INSERT INTO workout_sets (daily_workout_id, set_number, weight, reps) VALUES (?, ?, ?, ?)',
+            [editingWorkoutId, i + 1, set.weight, set.reps]
+          );
+        }
+      } else {
+        const dailyWorkoutResult = await db.runAsync(
+          'INSERT INTO daily_workouts (date, workout_type_id) VALUES (?, ?)',
+          [formattedDate, workoutType.id]
+        );
+        const dailyWorkoutId = dailyWorkoutResult.lastInsertRowId;
+
+        for (let i = 0; i < sets.length; i++) {
+          const set = sets[i];
+          await db.runAsync(
+            'INSERT INTO workout_sets (daily_workout_id, set_number, weight, reps) VALUES (?, ?, ?, ?)',
+            [dailyWorkoutId, i + 1, set.weight, set.reps]
+          );
+        }
       }
-      
+
       setSelectedWorkout('');
       setSets([{ id: 1, weight: '', reps: '' }]);
+      setEditingWorkoutId(null);
       await loadSavedWorkouts();
       
-      Alert.alert('Success', 'Workout saved successfully');
-      
+      Alert.alert('Success', `Workout ${editingWorkoutId ? 'updated' : 'saved'} successfully`);
     } catch (error) {
       console.error('Error saving workout:', error);
-      Alert.alert('Error', 'Failed to save workout');
+      Alert.alert('Error', `Failed to ${editingWorkoutId ? 'update' : 'save'} workout`);
     } finally {
       setSaving(false);
     }
@@ -335,9 +373,22 @@ const Journal = ({ date }) => {
                 disabled={saving}
               >
                 <Text style={styles.saveButtonText}>
-                  {saving ? 'Saving...' : 'Save Workout'}
+                  {saving ? 'Saving...' : editingWorkoutId ? 'Update Workout' : 'Save Workout'}
                 </Text>
               </TouchableOpacity>
+              {editingWorkoutId && (
+                <TouchableOpacity
+                  style={[styles.saveButton, styles.cancelButton]}
+                  onPress={() => {
+                    setSelectedWorkout('');
+                    setSets([{ id: 1, weight: '', reps: '' }]);
+                    setEditingWorkoutId(null);
+                  }}
+                  disabled={saving}
+                >
+                  <Text style={styles.saveButtonText}>Cancel Edit</Text>
+                </TouchableOpacity>
+              )}
             </>
           ) : null}
         </View>
@@ -350,6 +401,14 @@ const Journal = ({ date }) => {
               <View key={workout.daily_workout_id} style={styles.savedWorkoutCard}>
                 <View style={styles.savedWorkoutHeader}>
                   <Text style={styles.savedWorkoutName}>{workout.workout_name}</Text>
+                    
+                  <TouchableOpacity
+                    onPress={() => editWorkout(workout)}
+                    style={styles.editButton}
+                  >
+                    <Text style={styles.editButtonText}>Edit</Text>
+                  </TouchableOpacity>
+
                   <TouchableOpacity
                     onPress={() => deleteWorkout(workout.daily_workout_id)}
                     style={styles.deleteButton}
@@ -714,6 +773,22 @@ const styles = StyleSheet.create({
   },
   picker: {
     height: 200,
+  },
+  editButton: {
+    backgroundColor: '#3498db',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 4,
+    marginRight: 8,
+  },
+  editButtonText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  cancelButton: {
+    backgroundColor: '#95a5a6',
+    marginTop: 8,
   },
 });
 
