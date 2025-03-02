@@ -16,6 +16,7 @@ import {
 import { Picker } from '@react-native-picker/picker';
 import { openDB, workoutTypeOperations } from '../db/db';
 import { useWorkout } from '../context/workoutcontext';
+import RestTimer from './rest-timer';
 
 const { width, height } = Dimensions.get('window');
 
@@ -23,7 +24,7 @@ const Journal = ({ date }) => {
   const [db, setDb] = useState(null);
   const [workoutTypes, setWorkoutTypes] = useState([]);
   const [selectedWorkout, setSelectedWorkout] = useState('');
-  const [sets, setSets] = useState([{ id: 1, weight: '', reps: '' }]);
+  const [sets, setSets] = useState([{ id: 1, weight: '', reps: '', rest_time: 0 }]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savedWorkouts, setSavedWorkouts] = useState([]);
@@ -87,6 +88,14 @@ const Journal = ({ date }) => {
       }
     }
   }, [db, date, workoutListVersion]);
+
+  // Helper function to format rest time (seconds) to MM:SS
+  const formatRestTime = (seconds) => {
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+  };
+
   const loadWorkoutTypes = async () => {
     if (!db) return;
     
@@ -114,7 +123,7 @@ const Journal = ({ date }) => {
       
       const workoutsWithSets = await Promise.all(workouts.map(async (workout) => {
         const sets = await db.getAllAsync(`
-          SELECT id, set_number, weight, reps
+          SELECT id, set_number, weight, reps, rest_time
           FROM workout_sets
           WHERE daily_workout_id = ?
           ORDER BY set_number
@@ -130,7 +139,7 @@ const Journal = ({ date }) => {
       
       if (workoutsWithSets.length === 0) {
         setSelectedWorkout('');
-        setSets([{ id: 1, weight: '', reps: '' }]);
+        setSets([{ id: 1, weight: '', reps: '', rest_time: 0 }]);
       }
       
     } catch (error) {
@@ -149,7 +158,7 @@ const Journal = ({ date }) => {
 
   const addSet = () => {
     const newId = sets.length > 0 ? Math.max(...sets.map(set => set.id)) + 1 : 1;
-    setSets([...sets, { id: newId, weight: '', reps: '' }]);
+    setSets([...sets, { id: newId, weight: '', reps: '', rest_time: 0 }]);
   };
 
   const removeSet = async (id) => {
@@ -181,12 +190,20 @@ const Journal = ({ date }) => {
     ));
   };
 
+  // Add new function to update rest time
+  const updateRestTime = (id, time) => {
+    setSets(sets.map(set => 
+      set.id === id ? { ...set, rest_time: time } : set
+    ));
+  };
+
   const editWorkout = (workout) => {
     setSelectedWorkout(workout.workout_name);
     setSets(workout.sets.map(set => ({
       id: set.id,
-      weight: set.weight.toString(),
-      reps: set.reps.toString()
+      weight: set.weight ? set.weight.toString() : '',
+      reps: set.reps ? set.reps.toString() : '',
+      rest_time: set.rest_time || 0
     })));
     setOriginalSets(workout.sets);
     setEditingWorkoutId(workout.daily_workout_id);
@@ -221,8 +238,8 @@ const Journal = ({ date }) => {
         for (let i = 0; i < sets.length; i++) {
           const set = sets[i];
           await db.runAsync(
-            'INSERT INTO workout_sets (daily_workout_id, set_number, weight, reps) VALUES (?, ?, ?, ?)',
-            [editingWorkoutId, i + 1, set.weight, set.reps]
+            'INSERT INTO workout_sets (daily_workout_id, set_number, weight, reps, rest_time) VALUES (?, ?, ?, ?, ?)',
+            [editingWorkoutId, i + 1, set.weight, set.reps, set.rest_time]
           );
         }
       } else {
@@ -235,14 +252,14 @@ const Journal = ({ date }) => {
         for (let i = 0; i < sets.length; i++) {
           const set = sets[i];
           await db.runAsync(
-            'INSERT INTO workout_sets (daily_workout_id, set_number, weight, reps) VALUES (?, ?, ?, ?)',
-            [dailyWorkoutId, i + 1, set.weight, set.reps]
+            'INSERT INTO workout_sets (daily_workout_id, set_number, weight, reps, rest_time) VALUES (?, ?, ?, ?, ?)',
+            [dailyWorkoutId, i + 1, set.weight, set.reps, set.rest_time]
           );
         }
       }
 
       setSelectedWorkout('');
-      setSets([{ id: 1, weight: '', reps: '' }]);
+      setSets([{ id: 1, weight: '', reps: '', rest_time: 0 }]);
       setEditingWorkoutId(null);
       await loadSavedWorkouts();
       
@@ -314,7 +331,7 @@ const Journal = ({ date }) => {
                 style={styles.clearWorkoutButton}
                 onPress={() => {
                   setSelectedWorkout('');
-                  setSets([{ id: 1, weight: '', reps: '' }]);
+                  setSets([{ id: 1, weight: '', reps: '', rest_time: 0 }]);
                 }}
                 disabled={saving}
               >
@@ -356,6 +373,20 @@ const Journal = ({ date }) => {
                       <Text style={styles.setButtonText}>-</Text>
                     </TouchableOpacity>
                   </View>
+                  
+                  {/* Rest Timer */}
+                  <View style={styles.restTimerContainer}>
+                    <Text style={styles.restTimerLabel}>Rest:</Text>
+                    <RestTimer 
+                      initialTime={set.rest_time || 0}
+                      onTimerUpdate={(time) => {
+                        // Only update if the time has changed
+                        if (time !== set.rest_time) {
+                          updateRestTime(set.id, time);
+                        }
+                      }} 
+                    />
+                  </View>
                 </View>
               ))}
               
@@ -381,7 +412,7 @@ const Journal = ({ date }) => {
                   style={[styles.saveButton, styles.cancelButton]}
                   onPress={() => {
                     setSelectedWorkout('');
-                    setSets([{ id: 1, weight: '', reps: '' }]);
+                    setSets([{ id: 1, weight: '', reps: '', rest_time: 0 }]);
                     setEditingWorkoutId(null);
                   }}
                   disabled={saving}
@@ -422,6 +453,7 @@ const Journal = ({ date }) => {
                     <Text style={[styles.setsTableCell, styles.setNumberCell]}>Set</Text>
                     <Text style={[styles.setsTableCell, styles.weightCell]}>Weight</Text>
                     <Text style={[styles.setsTableCell, styles.repsCell]}>Reps</Text>
+                    <Text style={[styles.setsTableCell, styles.restTimeCell]}>Rest</Text>
                   </View>
                   
                   {workout.sets.map((set) => (
@@ -429,6 +461,9 @@ const Journal = ({ date }) => {
                       <Text style={[styles.setsTableCell, styles.setNumberCell]}>{set.set_number}</Text>
                       <Text style={[styles.setsTableCell, styles.weightCell]}>{set.weight}</Text>
                       <Text style={[styles.setsTableCell, styles.repsCell]}>{set.reps}</Text>
+                      <Text style={[styles.setsTableCell, styles.restTimeCell]}>
+                        {formatRestTime(set.rest_time || 0)}
+                      </Text>
                     </View>
                   ))}
                 </View>
@@ -727,6 +762,9 @@ const styles = StyleSheet.create({
   repsCell: {
     flex: 2,
   },
+  restTimeCell: {
+    flex: 2, 
+  },
   pickerOverlay: {
     position: 'absolute',
     top: 0,
@@ -789,6 +827,18 @@ const styles = StyleSheet.create({
   cancelButton: {
     backgroundColor: '#95a5a6',
     marginTop: 8,
+  },
+  // New styles for rest timer
+  restTimerContainer: {
+    marginTop: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  restTimerLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#34495e',
+    marginRight: 8,
   },
 });
 
