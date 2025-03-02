@@ -35,16 +35,16 @@ const initDatabase = async () => {
         `).then(() => console.log('Daily workouts table created successfully'))
           .catch(error => console.error('Error creating daily_workouts table:', error)),
 
-        db.execAsync(`
-          CREATE TABLE IF NOT EXISTS workout_sets (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            daily_workout_id INTEGER,
-            set_number INTEGER,
-            reps INTEGER,
-            weight TEXT,
-            FOREIGN KEY (daily_workout_id) REFERENCES daily_workouts (id)
-          );
-        `).then(() => console.log('Workout sets table created successfully'))
+          db.execAsync(`
+            CREATE TABLE IF NOT EXISTS workout_sets (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              daily_workout_id INTEGER,
+              set_number INTEGER,
+              reps INTEGER,
+              weight TEXT,
+              FOREIGN KEY (daily_workout_id) REFERENCES daily_workouts (id)
+            );
+          `).then(() => console.log('Workout sets table created successfully'))
           .catch(error => console.error('Error creating workout_sets table:', error))
       ]);
     };
@@ -54,19 +54,25 @@ const initDatabase = async () => {
         const columns = await db.getAllAsync("PRAGMA table_info(workout_sets);");
         
         const hasWeightColumn = columns.some(col => col.name === 'weight');
+        const hasRestTimeColumn = columns.some(col => col.name === 'rest_time');
         
-        if (!hasWeightColumn) {
-          try {
-            await db.execAsync(`
-              BEGIN TRANSACTION;
-              ALTER TABLE workout_sets ADD COLUMN weight TEXT;
-              COMMIT;
-            `);
+        try {
+          await db.execAsync('BEGIN TRANSACTION;');
+          
+          if (!hasWeightColumn) {
+            await db.execAsync('ALTER TABLE workout_sets ADD COLUMN weight TEXT;');
             console.log('Successfully added weight column to workout_sets table');
-          } catch (addColumnError) {
-            console.warn('Error adding weight column:', addColumnError);
-            await db.execAsync('ROLLBACK;');
           }
+          
+          if (!hasRestTimeColumn) {
+            await db.execAsync('ALTER TABLE workout_sets ADD COLUMN rest_time INTEGER DEFAULT 0;');
+            console.log('Successfully added rest_time column to workout_sets table');
+          }
+          
+          await db.execAsync('COMMIT;');
+        } catch (addColumnError) {
+          console.warn('Error updating schema:', addColumnError);
+          await db.execAsync('ROLLBACK;');
         }
       } catch (migrationError) {
         console.error('Schema migration failed:', migrationError);
