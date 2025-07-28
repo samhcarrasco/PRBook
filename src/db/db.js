@@ -14,7 +14,7 @@ const openDB = async () => {
 const initDatabase = async () => {
   try {
     const db = await openDB();
-    
+
     const createTables = async () => {
       await Promise.all([
         db.execAsync(`
@@ -35,61 +35,22 @@ const initDatabase = async () => {
         `).then(() => console.log('Daily workouts table created successfully'))
           .catch(error => console.error('Error creating daily_workouts table:', error)),
 
-          db.execAsync(`
-            CREATE TABLE IF NOT EXISTS workout_sets (
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              daily_workout_id INTEGER,
-              set_number INTEGER,
-              reps INTEGER,
-              weight TEXT,
-              FOREIGN KEY (daily_workout_id) REFERENCES daily_workouts (id)
-            );
-          `).then(() => console.log('Workout sets table created successfully'))
+        db.execAsync(`
+          CREATE TABLE IF NOT EXISTS workout_sets (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            daily_workout_id INTEGER,
+            set_number INTEGER,
+            reps INTEGER,
+            weight TEXT,
+            rest_time INTEGER DEFAULT 0,
+            FOREIGN KEY (daily_workout_id) REFERENCES daily_workouts (id)
+          );
+        `).then(() => console.log('Workout sets table created successfully'))
           .catch(error => console.error('Error creating workout_sets table:', error))
       ]);
     };
 
-    const migrateDatabaseSchema = async () => {
-      try {
-        const columns = await db.getAllAsync("PRAGMA table_info(workout_sets);");
-        
-        const hasWeightColumn = columns.some(col => col.name === 'weight');
-        const hasRestTimeColumn = columns.some(col => col.name === 'rest_time');
-        
-        try {
-          await db.execAsync('BEGIN TRANSACTION;');
-          
-          if (!hasWeightColumn) {
-            await db.execAsync('ALTER TABLE workout_sets ADD COLUMN weight TEXT;');
-            console.log('Successfully added weight column to workout_sets table');
-          }
-          
-          if (!hasRestTimeColumn) {
-            await db.execAsync('ALTER TABLE workout_sets ADD COLUMN rest_time INTEGER DEFAULT 0;');
-            console.log('Successfully added rest_time column to workout_sets table');
-          }
-          
-          await db.execAsync('COMMIT;');
-        } catch (addColumnError) {
-          console.warn('Error updating schema:', addColumnError);
-          await db.execAsync('ROLLBACK;');
-        }
-      } catch (migrationError) {
-        console.error('Schema migration failed:', migrationError);
-        throw migrationError;
-      }
-    };
-
     await createTables();
-    await migrateDatabaseSchema();
-    
-    try {
-      const tableInfo = await db.getAllAsync("PRAGMA table_info(workout_types);");
-      console.log('Workout Types Table Info:', tableInfo);
-    } catch (infoError) {
-      console.error('Error getting table info:', infoError);
-    }
-    
     console.log('Database initialized successfully');
     return db;
   } catch (error) {
@@ -101,12 +62,10 @@ const initDatabase = async () => {
 const workoutTypeOperations = {
   addWorkoutType: async (db, name) => {
     try {
-      const result = await db.runAsync(
-        'INSERT INTO workout_types (name) VALUES (?)', 
+      await db.runAsync(
+        'INSERT INTO workout_types (name) VALUES (?)',
         [name]
       );
-      console.log('Workout added - Last Insert ID:', result.lastInsertRowId);
-      return result;
     } catch (error) {
       console.error('Error adding workout type:', error);
       if (error.message.includes('UNIQUE')) {
@@ -118,15 +77,12 @@ const workoutTypeOperations = {
 
   getWorkoutTypes: async (db) => {
     try {
-      const tableCheck = await db.getAllAsync("SELECT name FROM sqlite_master WHERE type='table' AND name='workout_types';");
-      console.log('Table Exists Check:', tableCheck);
       const result = await db.getAllAsync(
         'SELECT * FROM workout_types ORDER BY LOWER(name) ASC'
       );
-      
+     
       console.log('Total Workout Types Count:', result.length);
       console.log('Workout Types:', JSON.stringify(result, null, 2));
-      
       return result;
     } catch (error) {
       console.error('Error getting workout types:', error);
@@ -151,7 +107,7 @@ const workoutTypeOperations = {
   deleteWorkoutType: async (db, name) => {
     try {
       await db.runAsync(
-        'DELETE FROM workout_types WHERE LOWER(name) = LOWER(?)', 
+        'DELETE FROM workout_types WHERE LOWER(name) = LOWER(?)',
         [name]
       );
     } catch (error) {

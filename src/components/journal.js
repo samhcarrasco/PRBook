@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   View, 
   Text, 
@@ -33,14 +33,20 @@ const Journal = ({ date }) => {
   const [keyboardHeight] = useState(new Animated.Value(0));
   const [editingWorkoutId, setEditingWorkoutId] = useState(null);
   const [originalSets, setOriginalSets] = useState([]);
+  const [isJournalInputFocused, setIsJournalInputFocused] = useState(false);
+  const isJournalInputFocusedRef = useRef(false);
 
   useEffect(() => {
     const keyboardWillShow = (event) => {
-      Animated.timing(keyboardHeight, {
-        duration: Platform.OS === 'ios' ? event.duration : 250,
-        toValue: event.endCoordinates.height,
-        useNativeDriver: false,
-      }).start();
+      setTimeout(() => {
+        if (isJournalInputFocusedRef.current) {
+          Animated.timing(keyboardHeight, {
+            duration: Platform.OS === 'ios' ? event.duration : 250,
+            toValue: event.endCoordinates.height,
+            useNativeDriver: false,
+          }).start();
+        }
+      }, 50);
     };
 
     const keyboardWillHide = (event) => {
@@ -49,6 +55,8 @@ const Journal = ({ date }) => {
         toValue: 0,
         useNativeDriver: false,
       }).start();
+      setIsJournalInputFocused(false);
+      isJournalInputFocusedRef.current = false;
     };
 
     const showListener = Platform.OS === 'ios' 
@@ -63,7 +71,7 @@ const Journal = ({ date }) => {
       showListener.remove();
       hideListener.remove();
     };
-  }, [keyboardHeight]);
+  }, [keyboardHeight, isJournalInputFocused]);
 
   useEffect(() => {
     const initDB = async () => {
@@ -352,6 +360,10 @@ const Journal = ({ date }) => {
                       placeholder="Weight"
                       value={set.weight}
                       onChangeText={(value) => updateSetValue(set.id, 'weight', value)}
+                      onFocus={() => {
+                        setIsJournalInputFocused(true);
+                        isJournalInputFocusedRef.current = true;
+                      }}
                       keyboardType="numeric"
                       editable={!saving}
                     />
@@ -361,6 +373,10 @@ const Journal = ({ date }) => {
                       placeholder="Reps"
                       value={set.reps}
                       onChangeText={(value) => updateSetValue(set.id, 'reps', value)}
+                      onFocus={() => {
+                        setIsJournalInputFocused(true);
+                        isJournalInputFocusedRef.current = true;
+                      }}
                       keyboardType="numeric"
                       editable={!saving}
                     />
