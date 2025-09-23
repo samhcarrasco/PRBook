@@ -4,7 +4,7 @@ import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import moment from 'moment';
 
 const { width } = Dimensions.get('window');
-const DAY_WIDTH = width / 7;
+const DAY_WIDTH = (width - 60) / 7;
 
 const WeeklyCalendar = ({ onDateSelect }) => {
   const [selectedDate, setSelectedDate] = useState(moment());
