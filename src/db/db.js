@@ -46,7 +46,19 @@ const initDatabase = async () => {
             FOREIGN KEY (daily_workout_id) REFERENCES daily_workouts (id)
           );
         `).then(() => console.log('Workout sets table created successfully'))
-          .catch(error => console.error('Error creating workout_sets table:', error))
+          .catch(error => console.error('Error creating workout_sets table:', error)),
+
+          db.execAsync(`
+            CREATE TABLE IF NOT EXISTS personal_records (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              date TEXT NOT NULL,
+              workout_set_id INTEGER NOT NULL,
+              workout_type_id INTEGER NOT NULL,
+              FOREIGN KEY (workout_set_id) REFERENCES workout_sets (id),
+              FOREIGN KEY (workout_type_id) REFERENCES workout_types (id)
+            );
+          `).then(() => console.log("Personal records table created successfully"))
+            .catch(error => console.error('Error creating workout_sets table:', error))
       ]);
     };
 
