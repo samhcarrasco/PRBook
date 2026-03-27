@@ -4,7 +4,7 @@ import WeeklyCalendar from '../components/calendar-strip';
 import WorkoutCard from '../components/workout-card';
 import Journal from '../components/journal';
 
-const WorkoutScreen = () => {
+const WorkoutScreen = ({ isActive = true }) => {
   const [selectedDate, setSelectedDate] = useState(new Date());
 
   return (
@@ -19,7 +19,7 @@ const WorkoutScreen = () => {
       <WeeklyCalendar onDateSelect={setSelectedDate} />
       <WorkoutCard date={selectedDate} />
       <View style={{ flex: 1 }}>
-        <Journal date={selectedDate} />
+        <Journal date={selectedDate} isActive={isActive} />
       </View>
     </View>
   );

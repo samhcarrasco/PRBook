@@ -74,9 +74,15 @@ const GhostTextInput = ({
         style,
         { pointerEvents: 'none' },
       ]}>
-        <Text style={[styles.inputText, { color: c.textPrimary }]}>{value}</Text>
-        {ghostText && (
-          <Text style={[styles.ghostText, { color: c.textTertiary }]}>{ghostText}</Text>
+        {!value && !ghostText && placeholder ? (
+          <Text style={[styles.ghostText, { color: c.textTertiary }]}>{placeholder}</Text>
+        ) : (
+          <>
+            <Text style={[styles.inputText, { color: c.textPrimary }]}>{value}</Text>
+            {ghostText && (
+              <Text style={[styles.ghostText, { color: c.textTertiary }]}>{ghostText}</Text>
+            )}
+          </>
         )}
       </View>
     </View>

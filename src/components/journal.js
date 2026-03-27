@@ -1,15 +1,14 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   TextInput,
   StyleSheet,
-  Dimensions,
   Alert,
   FlatList,
   Keyboard,
-  Animated as RNAnimated,
   Platform,
+  KeyboardAvoidingView,
 } from 'react-native';
 import {
   Surface,
@@ -30,9 +29,7 @@ import { useAppTheme } from '../context/themecontext';
 import { PR_TYPE_CONFIG } from '../theme/theme';
 import RestTimer from './rest-timer';
 
-const { height } = Dimensions.get('window');
-
-const Journal = ({ date }) => {
+const Journal = ({ date, isActive = true }) => {
   const [db, setDb] = useState(null);
   const [workoutTypes, setWorkoutTypes] = useState([]);
   const [selectedWorkout, setSelectedWorkout] = useState('');
@@ -46,51 +43,18 @@ const Journal = ({ date }) => {
     workoutHistoryVersion,
     refreshWorkoutHistory,
   } = useWorkout();
-  const [keyboardHeight] = useState(new RNAnimated.Value(0));
   const [editingWorkoutId, setEditingWorkoutId] = useState(null);
   const [originalSets, setOriginalSets] = useState([]);
-  const [isJournalInputFocused, setIsJournalInputFocused] = useState(false);
-  const isJournalInputFocusedRef = useRef(false);
   const [showLegend, setShowLegend] = useState(false);
   const { theme } = useAppTheme();
   const c = theme.custom.colors;
 
   useEffect(() => {
-    const keyboardWillShow = (event) => {
-      setTimeout(() => {
-        if (isJournalInputFocusedRef.current) {
-          RNAnimated.timing(keyboardHeight, {
-            duration: Platform.OS === 'ios' ? event.duration : 250,
-            toValue: event.endCoordinates.height,
-            useNativeDriver: false,
-          }).start();
-        }
-      }, 50);
-    };
-
-    const keyboardWillHide = (event) => {
-      RNAnimated.timing(keyboardHeight, {
-        duration: Platform.OS === 'ios' ? event.duration : 250,
-        toValue: 0,
-        useNativeDriver: false,
-      }).start();
-      setIsJournalInputFocused(false);
-      isJournalInputFocusedRef.current = false;
-    };
-
-    const showListener = Platform.OS === 'ios'
-      ? Keyboard.addListener('keyboardWillShow', keyboardWillShow)
-      : Keyboard.addListener('keyboardDidShow', keyboardWillShow);
-
-    const hideListener = Platform.OS === 'ios'
-      ? Keyboard.addListener('keyboardWillHide', keyboardWillHide)
-      : Keyboard.addListener('keyboardDidHide', keyboardWillHide);
-
-    return () => {
-      showListener.remove();
-      hideListener.remove();
-    };
-  }, [keyboardHeight, isJournalInputFocused]);
+    if (!isActive) {
+      Keyboard.dismiss();
+      setShowPicker(false);
+    }
+  }, [isActive]);
 
   useEffect(() => {
     const initDB = async () => {
@@ -176,7 +140,11 @@ const Journal = ({ date }) => {
   const formatDate = (dateObj) => {
     if (!dateObj) return '';
     if (typeof dateObj === 'string') return dateObj;
-    return dateObj.toISOString().split('T')[0];
+
+    const year = dateObj.getFullYear();
+    const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const day = String(dateObj.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   };
 
   const addSet = () => {
@@ -246,6 +214,8 @@ const Journal = ({ date }) => {
   };
 
   const saveWorkout = async () => {
+    Keyboard.dismiss();
+
     if (!db || !date || !selectedWorkout || sets.length === 0) {
       Alert.alert('Error', 'Please select a workout and add at least one set');
       return;
@@ -373,10 +343,6 @@ const Journal = ({ date }) => {
             placeholderTextColor={c.textTertiary}
             value={set.weight}
             onChangeText={(value) => updateSetValue(set.id, 'weight', value)}
-            onFocus={() => {
-              setIsJournalInputFocused(true);
-              isJournalInputFocusedRef.current = true;
-            }}
             keyboardType="numeric"
             editable={!saving}
           />
@@ -390,10 +356,6 @@ const Journal = ({ date }) => {
             placeholderTextColor={c.textTertiary}
             value={set.reps}
             onChangeText={(value) => updateSetValue(set.id, 'reps', value)}
-            onFocus={() => {
-              setIsJournalInputFocused(true);
-              isJournalInputFocusedRef.current = true;
-            }}
             keyboardType="numeric"
             editable={!saving}
           />
@@ -616,18 +578,10 @@ const Journal = ({ date }) => {
   }
 
   return (
-    <RNAnimated.View
-      style={[
-        styles.container,
-        {
-          transform: [{
-            translateY: keyboardHeight.interpolate({
-              inputRange: [0, height],
-              outputRange: [0, -height],
-            })
-          }]
-        }
-      ]}
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      enabled={isActive}
     >
       <Surface style={[styles.journalContainer, { backgroundColor: c.surface }]} elevation={2}>
         <Text style={[styles.headerText, { color: c.textPrimary }]}>Workout Journal</Text>
@@ -643,6 +597,7 @@ const Journal = ({ date }) => {
           bounces={true}
           overScrollMode="always"
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
         />
       </Surface>
 
@@ -656,7 +611,8 @@ const Journal = ({ date }) => {
           <FlatList
             data={workoutTypes}
             keyExtractor={(item) => item.id.toString()}
-            style={styles.pickerList}
+            style={workoutTypes.length > 5 ? styles.pickerList : undefined}
+            scrollEnabled={workoutTypes.length > 5}
             renderItem={({ item }) => (
               <TouchableRipple
                 onPress={() => {
@@ -688,7 +644,7 @@ const Journal = ({ date }) => {
           </Button>
         </Modal>
       </Portal>
-    </RNAnimated.View>
+    </KeyboardAvoidingView>
   );
 };
 
@@ -935,7 +891,6 @@ const styles = StyleSheet.create({
     margin: 20,
     borderRadius: 16,
     padding: 20,
-    maxHeight: '70%',
   },
   pickerTitle: {
     fontSize: 20,
@@ -944,7 +899,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   pickerList: {
-    maxHeight: 400,
+    maxHeight: 245,
   },
   pickerItem: {
     flexDirection: 'row',

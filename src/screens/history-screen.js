@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
-import { Surface, ActivityIndicator } from 'react-native-paper';
+import { Surface, ActivityIndicator, Chip } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAppTheme } from '../context/themecontext';
 import { openDB, historyOperations, prOperations } from '../db/db';
@@ -9,12 +9,81 @@ import ExercisePicker from '../components/history/exercise-picker';
 import MetricChart from '../components/history/metric-chart';
 import WorkoutDetailModal from '../components/history/workout-detail-modal';
 import { HISTORY_METRICS } from '../components/history/history-metrics';
+import moment from 'moment';
+
+const TIME_WINDOW_OPTIONS = [
+  { key: '1W', label: '1W' },
+  { key: '2W', label: '2W' },
+  { key: '1M', label: '1M' },
+  { key: '3M', label: '3M' },
+  { key: '6M', label: '6M' },
+  { key: '1Y', label: '1Y' },
+  { key: 'ALL', label: 'All' },
+];
+
+const getWindowBounds = (windowKey, histories) => {
+  const today = moment().endOf('day');
+  const allSessionDates = histories.flatMap((history) =>
+    history.sessions.map((session) => session.date)
+  );
+  const sortedDates = [...allSessionDates].sort((left, right) => left.localeCompare(right));
+  const latestSessionDate = sortedDates.length > 0
+    ? moment(sortedDates[sortedDates.length - 1], 'YYYY-MM-DD').endOf('day')
+    : null;
+  const anchorDate = latestSessionDate && latestSessionDate.isAfter(today)
+    ? latestSessionDate
+    : today;
+  const start = anchorDate.clone().startOf('day');
+
+  switch (windowKey) {
+    case '1W':
+      return {
+        startDate: anchorDate.clone().subtract(6, 'days').startOf('day').format('YYYY-MM-DD'),
+        endDate: anchorDate.format('YYYY-MM-DD'),
+      };
+    case '2W':
+      return {
+        startDate: anchorDate.clone().subtract(13, 'days').startOf('day').format('YYYY-MM-DD'),
+        endDate: anchorDate.format('YYYY-MM-DD'),
+      };
+    case '1M':
+      return {
+        startDate: anchorDate.clone().subtract(1, 'month').startOf('day').format('YYYY-MM-DD'),
+        endDate: anchorDate.format('YYYY-MM-DD'),
+      };
+    case '3M':
+      return {
+        startDate: anchorDate.clone().subtract(3, 'months').startOf('day').format('YYYY-MM-DD'),
+        endDate: anchorDate.format('YYYY-MM-DD'),
+      };
+    case '6M':
+      return {
+        startDate: anchorDate.clone().subtract(6, 'months').startOf('day').format('YYYY-MM-DD'),
+        endDate: anchorDate.format('YYYY-MM-DD'),
+      };
+    case '1Y':
+      return {
+        startDate: anchorDate.clone().subtract(1, 'year').startOf('day').format('YYYY-MM-DD'),
+        endDate: anchorDate.format('YYYY-MM-DD'),
+      };
+    default:
+      break;
+  }
+
+  const earliestDate = sortedDates[0] || start.format('YYYY-MM-DD');
+
+  return {
+    startDate: earliestDate,
+    endDate: anchorDate.format('YYYY-MM-DD'),
+  };
+};
 
 const HistoryScreen = () => {
   const { theme } = useAppTheme();
   const c = theme.custom.colors;
   const { workoutHistoryVersion } = useWorkout();
 
+  const [selectedTimeWindow, setSelectedTimeWindow] = useState('1W');
   const [selectedExercises, setSelectedExercises] = useState([]);
   const [exerciseHistories, setExerciseHistories] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -108,8 +177,31 @@ const HistoryScreen = () => {
     return `${selectedExercises.length} exercises selected`;
   }, [selectedExercises]);
 
+  const windowBounds = useMemo(
+    () => getWindowBounds(selectedTimeWindow, exerciseHistories),
+    [exerciseHistories, selectedTimeWindow]
+  );
+
+  const windowedHistories = useMemo(() => {
+    const windowStart = moment(windowBounds.startDate, 'YYYY-MM-DD').startOf('day');
+    const windowEnd = moment(windowBounds.endDate, 'YYYY-MM-DD').endOf('day');
+
+    return exerciseHistories.map((history) => ({
+      ...history,
+      sessions: history.sessions.filter((session) => {
+        const sessionDate = moment(session.date, 'YYYY-MM-DD');
+        return sessionDate.isBetween(windowStart, windowEnd, 'day', '[]');
+      }),
+    }));
+  }, [exerciseHistories, windowBounds]);
+
+  const hasWindowData = useMemo(
+    () => windowedHistories.some((history) => history.sessions.length > 0),
+    [windowedHistories]
+  );
+
   const handleDatePress = (date) => {
-    const workoutsForDate = exerciseHistories.flatMap((history) =>
+    const workoutsForDate = windowedHistories.flatMap((history) =>
       history.sessions
         .filter((session) => session.date === date)
         .map((session) => ({
@@ -138,6 +230,38 @@ const HistoryScreen = () => {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
+          <View style={styles.timeWindowContainer}>
+            <Text style={[styles.timeWindowLabel, { color: c.textSecondary }]}>Passed:</Text>
+            <View style={styles.timeWindowChips}>
+              {TIME_WINDOW_OPTIONS.map((option) => {
+                const isSelected = selectedTimeWindow === option.key;
+
+                return (
+                  <Chip
+                    key={option.key}
+                    compact
+                    selected={isSelected}
+                    onPress={() => setSelectedTimeWindow(option.key)}
+                    mode={isSelected ? 'flat' : 'outlined'}
+                    style={[
+                      styles.timeWindowChip,
+                      isSelected
+                        ? { backgroundColor: c.primary }
+                        : { borderColor: c.borderLight, backgroundColor: c.surfaceVariant },
+                    ]}
+                    textStyle={[
+                      styles.timeWindowChipText,
+                      { color: isSelected ? '#FFFFFF' : c.textSecondary },
+                    ]}
+                    showSelectedOverlay={false}
+                  >
+                    {option.label}
+                  </Chip>
+                );
+              })}
+            </View>
+          </View>
+
           <ExercisePicker
             selectedExercises={selectedExercises}
             onChange={setSelectedExercises}
@@ -150,11 +274,17 @@ const HistoryScreen = () => {
             </Text>
           )}
 
+          {!loading && selectedExercises.length > 0 && !hasWindowData && exerciseHistories.length > 0 && (
+            <Text style={[styles.windowHint, { color: c.textTertiary }]}>
+              No workouts in this window yet. The graphs below are still scaled to the selected date frame.
+            </Text>
+          )}
+
           {loading && (
             <ActivityIndicator animating size="large" color={c.primary} style={styles.loader} />
           )}
 
-          {!loading && exerciseHistories.length > 0 && HISTORY_METRICS.map((metric) => (
+          {!loading && selectedExercises.length > 0 && exerciseHistories.length > 0 && HISTORY_METRICS.map((metric) => (
             <Surface key={metric.key} style={[styles.chartCard, { backgroundColor: c.surfaceVariant }]} elevation={0}>
               <View style={styles.cardHeader}>
                 <View style={styles.cardTitleBlock}>
@@ -169,9 +299,10 @@ const HistoryScreen = () => {
               </View>
 
               <MetricChart
-                histories={exerciseHistories}
+                histories={windowedHistories}
                 metric={metric}
                 onDatePress={handleDatePress}
+                timelineBounds={windowBounds}
               />
             </Surface>
           ))}
@@ -233,10 +364,37 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingBottom: 28,
   },
+  timeWindowContainer: {
+    marginBottom: 16,
+    gap: 10,
+  },
+  timeWindowLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    paddingLeft: 2,
+  },
+  timeWindowChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  timeWindowChip: {
+    height: 34,
+  },
+  timeWindowChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
   selectionHint: {
     fontSize: 13,
     marginBottom: 12,
     paddingLeft: 2,
+  },
+  windowHint: {
+    fontSize: 12,
+    marginBottom: 12,
+    paddingLeft: 2,
+    lineHeight: 18,
   },
   chartCard: {
     borderRadius: 14,

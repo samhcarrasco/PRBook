@@ -117,33 +117,48 @@ const ExercisePicker = ({ selectedExercises, onChange, historyVersion }) => {
         >
           <Text style={[styles.modalTitle, { color: c.textPrimary }]}>Select Exercises</Text>
           <Text style={[styles.modalSubtitle, { color: c.textTertiary }]}>
-            Pick one or more exercises to compare on every graph.
+            {exercises.length} exercises available
           </Text>
 
           <FlatList
             data={exercises}
             keyExtractor={(item) => item.id.toString()}
             style={styles.list}
+            contentContainerStyle={styles.listContent}
+            numColumns={3}
+            columnWrapperStyle={styles.columnWrapper}
+            showsVerticalScrollIndicator={false}
             renderItem={({ item }) => {
               const isSelected = selectedIds.has(item.id);
 
               return (
                 <TouchableRipple
+                  style={styles.gridItemTouchable}
                   onPress={() => toggleExercise(item)}
                   rippleColor={c.primary + '20'}
                 >
-                  <View style={[styles.item, { borderBottomColor: c.border }]}>
-                    <View
+                  <View
+                    style={[
+                      styles.gridItem,
+                      isSelected
+                        ? { backgroundColor: c.primaryContainer, borderColor: c.primary }
+                        : { backgroundColor: c.surfaceVariant, borderColor: c.borderLight },
+                    ]}
+                  >
+                    {isSelected && (
+                      <View style={[styles.selectedBadge, { backgroundColor: c.primary }]}>
+                        <MaterialCommunityIcons name="check" size={12} color="#FFFFFF" />
+                      </View>
+                    )}
+                    <Text
                       style={[
-                        styles.checkbox,
-                        isSelected
-                          ? { backgroundColor: c.primary, borderColor: c.primary }
-                          : { borderColor: c.borderLight },
+                        styles.itemText,
+                        { color: isSelected ? c.primary : c.textPrimary },
                       ]}
+                      numberOfLines={2}
                     >
-                      {isSelected && <MaterialCommunityIcons name="check" size={16} color="#FFFFFF" />}
-                    </View>
-                    <Text style={[styles.itemText, { color: c.textPrimary }]}>{item.name}</Text>
+                      {item.name}
+                    </Text>
                   </View>
                 </TouchableRipple>
               );
@@ -215,45 +230,64 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   modal: {
-    margin: 20,
-    borderRadius: 16,
-    padding: 20,
-    maxHeight: '75%',
+    marginHorizontal: 12,
+    marginVertical: 12,
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingTop: 18,
+    paddingBottom: 14,
+    height: '50%',
   },
   modalTitle: {
-    fontSize: 20,
+    fontSize: 19,
     fontWeight: '700',
     textAlign: 'center',
   },
   modalSubtitle: {
-    fontSize: 13,
+    fontSize: 12,
     textAlign: 'center',
     marginTop: 6,
-    marginBottom: 16,
+    marginBottom: 14,
   },
   list: {
-    maxHeight: 420,
+    flexGrow: 1,
   },
-  item: {
-    flexDirection: 'row',
+  listContent: {
+    paddingBottom: 6,
+  },
+  columnWrapper: {
+    gap: 8,
+    marginBottom: 8,
+  },
+  gridItemTouchable: {
+    flex: 1,
+    maxWidth: '31.5%',
+  },
+  gridItem: {
+    minHeight: 58,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
     alignItems: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 4,
-    borderBottomWidth: 1,
-    gap: 12,
+    justifyContent: 'center',
+    position: 'relative',
   },
-  checkbox: {
-    width: 24,
-    height: 24,
-    borderRadius: 7,
-    borderWidth: 1.5,
+  selectedBadge: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
     alignItems: 'center',
     justifyContent: 'center',
   },
   itemText: {
-    fontSize: 16,
-    fontWeight: '500',
-    flex: 1,
+    fontSize: 12,
+    fontWeight: '600',
+    textAlign: 'center',
+    lineHeight: 15,
   },
   empty: {
     paddingVertical: 40,

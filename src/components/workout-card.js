@@ -112,7 +112,7 @@ const WorkoutCard = ({ date }) => {
             onChangeText={handleWorkoutNameChange}
             onFocus={handleInputFocus}
             suggestions={suggestions}
-            placeholder="Enter workout name"
+            placeholder="Add/Delete exercise here"
             autoCapitalize="words"
           />
         </View>

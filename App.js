@@ -8,9 +8,6 @@ import { initDatabase } from './src/db/db';
 import WorkoutScreen from './src/screens/workout-screen';
 import HistoryScreen from './src/screens/history-screen';
 
-const WorkoutRoute = () => <WorkoutScreen />;
-const HistoryRoute = () => <HistoryScreen />;
-
 function AppContent() {
   const { theme, isDark } = useAppTheme();
   const c = theme.custom.colors;
@@ -31,10 +28,16 @@ function AppContent() {
     setupDatabase();
   }, []);
 
-  const renderScene = BottomNavigation.SceneMap({
-    workout: WorkoutRoute,
-    history: HistoryRoute,
-  });
+  const renderScene = ({ route }) => {
+    switch (route.key) {
+      case 'workout':
+        return <WorkoutScreen isActive={index === 0} />;
+      case 'history':
+        return <HistoryScreen isActive={index === 1} />;
+      default:
+        return null;
+    }
+  };
 
   return (
     <PaperProvider theme={theme}>
