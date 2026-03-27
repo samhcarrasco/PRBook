@@ -1,18 +1,24 @@
-import React, { useEffect } from 'react';
-import { View, Keyboard, StatusBar } from 'react-native';
-import { PaperProvider } from 'react-native-paper';
+import React, { useEffect, useState } from 'react';
+import { StatusBar } from 'react-native';
+import { PaperProvider, BottomNavigation } from 'react-native-paper';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { WorkoutProvider } from './src/context/workoutcontext';
 import { ThemeProvider, useAppTheme } from './src/context/themecontext';
-import WeeklyCalendar from './src/components/calendar-strip';
-import WorkoutCard from './src/components/workout-card';
-import Journal from './src/components/journal';
 import { initDatabase } from './src/db/db';
-import { useState } from 'react';
+import WorkoutScreen from './src/screens/workout-screen';
+import HistoryScreen from './src/screens/history-screen';
+
+const WorkoutRoute = () => <WorkoutScreen />;
+const HistoryRoute = () => <HistoryScreen />;
 
 function AppContent() {
-  const [selectedDate, setSelectedDate] = useState(new Date());
   const { theme, isDark } = useAppTheme();
+  const c = theme.custom.colors;
+  const [index, setIndex] = useState(0);
+  const [routes] = useState([
+    { key: 'workout', title: 'Workout', focusedIcon: 'dumbbell', unfocusedIcon: 'dumbbell' },
+    { key: 'history', title: 'History', focusedIcon: 'chart-line', unfocusedIcon: 'chart-line-variant' },
+  ]);
 
   useEffect(() => {
     const setupDatabase = async () => {
@@ -25,25 +31,28 @@ function AppContent() {
     setupDatabase();
   }, []);
 
+  const renderScene = BottomNavigation.SceneMap({
+    workout: WorkoutRoute,
+    history: HistoryRoute,
+  });
+
   return (
     <PaperProvider theme={theme}>
-      <SafeAreaView
-        style={{ flex: 1, backgroundColor: theme.custom.colors.background }}
-        onStartShouldSetResponder={() => {
-          Keyboard.dismiss();
-          return false;
-        }}
-        onMoveShouldSetResponder={() => false}
-      >
+      <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: c.background }}>
         <StatusBar
           barStyle={isDark ? 'light-content' : 'dark-content'}
-          backgroundColor={theme.custom.colors.background}
+          backgroundColor={c.background}
         />
-        <WeeklyCalendar onDateSelect={setSelectedDate} />
-        <WorkoutCard date={selectedDate} />
-        <View style={{ flex: 1 }}>
-          <Journal date={selectedDate} />
-        </View>
+        <BottomNavigation
+          navigationState={{ index, routes }}
+          onIndexChange={setIndex}
+          renderScene={renderScene}
+          barStyle={{ backgroundColor: c.surface, borderTopWidth: 1, borderTopColor: c.border }}
+          activeColor={c.primary}
+          inactiveColor={c.textTertiary}
+          safeAreaInsets={{ bottom: 8 }}
+          theme={theme}
+        />
       </SafeAreaView>
     </PaperProvider>
   );

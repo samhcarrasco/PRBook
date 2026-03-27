@@ -300,4 +300,37 @@ const prOperations = {
   },
 };
 
-export { openDB, initDatabase, workoutTypeOperations, prOperations };
+const historyOperations = {
+  getExerciseHistory: async (db, workoutTypeId) => {
+    return await db.getAllAsync(
+      `SELECT dw.id as daily_workout_id, dw.date,
+              ws.set_number, ws.reps, ws.weight, ws.rest_time
+       FROM daily_workouts dw
+       JOIN workout_sets ws ON ws.daily_workout_id = dw.id
+       WHERE dw.workout_type_id = ?
+       ORDER BY dw.date ASC, ws.set_number ASC`,
+      [workoutTypeId]
+    );
+  },
+
+  getPRsForDate: async (db, workoutTypeId, date) => {
+    return await db.getAllAsync(
+      `SELECT ph.pr_type, ph.value, ph.previous_value, ph.secondary_value
+       FROM pr_history ph
+       WHERE ph.workout_type_id = ? AND ph.date_achieved = ?
+       ORDER BY ph.pr_type`,
+      [workoutTypeId, date]
+    );
+  },
+
+  getExercisesWithHistory: async (db) => {
+    return await db.getAllAsync(
+      `SELECT DISTINCT wt.id, wt.name
+       FROM workout_types wt
+       JOIN daily_workouts dw ON dw.workout_type_id = wt.id
+       ORDER BY LOWER(wt.name) ASC`
+    );
+  },
+};
+
+export { openDB, initDatabase, workoutTypeOperations, prOperations, historyOperations };

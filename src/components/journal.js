@@ -41,7 +41,11 @@ const Journal = ({ date }) => {
   const [saving, setSaving] = useState(false);
   const [savedWorkouts, setSavedWorkouts] = useState([]);
   const [showPicker, setShowPicker] = useState(false);
-  const { workoutListVersion } = useWorkout();
+  const {
+    workoutListVersion,
+    workoutHistoryVersion,
+    refreshWorkoutHistory,
+  } = useWorkout();
   const [keyboardHeight] = useState(new RNAnimated.Value(0));
   const [editingWorkoutId, setEditingWorkoutId] = useState(null);
   const [originalSets, setOriginalSets] = useState([]);
@@ -105,11 +109,14 @@ const Journal = ({ date }) => {
   useEffect(() => {
     if (db) {
       loadWorkoutTypes();
-      if (date) {
-        loadSavedWorkouts();
-      }
     }
-  }, [db, date, workoutListVersion]);
+  }, [db, workoutListVersion]);
+
+  useEffect(() => {
+    if (db && date) {
+      loadSavedWorkouts();
+    }
+  }, [db, date, workoutHistoryVersion]);
 
   const formatRestTime = (seconds) => {
     const minutes = Math.floor(seconds / 60);
@@ -291,6 +298,7 @@ const Journal = ({ date }) => {
       setSets([{ id: 1, weight: '', reps: '', rest_time: 0 }]);
       setEditingWorkoutId(null);
       await loadSavedWorkouts();
+      refreshWorkoutHistory();
 
       if (brokenPRs.length > 0) {
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -326,6 +334,7 @@ const Journal = ({ date }) => {
               await db.runAsync('DELETE FROM workout_sets WHERE daily_workout_id = ?', [dailyWorkoutId]);
               await db.runAsync('DELETE FROM daily_workouts WHERE id = ?', [dailyWorkoutId]);
               await loadSavedWorkouts();
+              refreshWorkoutHistory();
             } catch (error) {
               console.error('Error deleting workout:', error);
               Alert.alert('Error', 'Failed to delete workout');
