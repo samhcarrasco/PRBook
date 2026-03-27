@@ -14,11 +14,22 @@ import {
   Platform
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
-import { openDB, workoutTypeOperations } from '../db/db';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { openDB, workoutTypeOperations, prOperations } from '../db/db';
 import { useWorkout } from '../context/workoutcontext';
 import RestTimer from './rest-timer';
 
 const { width, height } = Dimensions.get('window');
+
+const PR_TYPE_CONFIG = {
+  max_weight:            { color: '#FFD700', label: 'Max Weight' },
+  max_reps_at_weight:    { color: '#FF6B35', label: 'Max Reps' },
+  max_sets_at_weight:    { color: '#E74C3C', label: 'Max Sets' },
+  best_single_rest:      { color: '#2ECC71', label: 'Lowest Rest Time' },
+  best_avg_rest:         { color: '#1ABC9C', label: 'Lowest Avg Rest' },
+  max_volume_single_set: { color: '#9B59B6', label: 'Max Volume - Single Set (weight x reps)' },
+  max_total_tonnage:     { color: '#3498DB', label: 'Max Total Tonnage (total for all sets )' },
+};
 
 const Journal = ({ date }) => {
   const [db, setDb] = useState(null);
@@ -35,6 +46,7 @@ const Journal = ({ date }) => {
   const [originalSets, setOriginalSets] = useState([]);
   const [isJournalInputFocused, setIsJournalInputFocused] = useState(false);
   const isJournalInputFocusedRef = useRef(false);
+  const [showLegend, setShowLegend] = useState(false);
 
   useEffect(() => {
     const keyboardWillShow = (event) => {
@@ -136,10 +148,13 @@ const Journal = ({ date }) => {
           WHERE daily_workout_id = ?
           ORDER BY set_number
         `, [workout.daily_workout_id]);
-        
+
+        const prTypes = await prOperations.getPRTypesForWorkout(db, workout.daily_workout_id);
+
         return {
           ...workout,
-          sets: sets
+          sets: sets,
+          prTypes: prTypes
         };
       }));
       
@@ -218,6 +233,22 @@ const Journal = ({ date }) => {
     setShowPicker(false);
   };
 
+  const formatPRMessage = (pr) => {
+    const label = PR_TYPE_CONFIG[pr.prType]?.label || pr.prType;
+    const atWeight = pr.secondaryValue ? ` at ${pr.secondaryValue} lbs` : '';
+    const isRest = pr.prType.includes('rest');
+    const formatVal = (v) => {
+      if (isRest) {
+        const mins = Math.floor(v / 60);
+        const secs = Math.round(v % 60);
+        return `${mins}:${secs.toString().padStart(2, '0')}`;
+      }
+      return Math.round(v * 100) / 100;
+    };
+    const prev = pr.previousValue != null ? ` (previous: ${formatVal(pr.previousValue)}${atWeight})` : ' (first record!)';
+    return `${label}${atWeight}: ${formatVal(pr.newValue)}${prev}`;
+  };
+
   const saveWorkout = async () => {
     if (!db || !date || !selectedWorkout || sets.length === 0) {
       Alert.alert('Error', 'Please select a workout and add at least one set');
@@ -237,6 +268,8 @@ const Journal = ({ date }) => {
 
       if (!workoutType) throw new Error('Selected workout type not found');
 
+      let savedWorkoutId;
+
       if (editingWorkoutId) {
         await db.runAsync(
           'DELETE FROM workout_sets WHERE daily_workout_id = ?',
@@ -250,28 +283,38 @@ const Journal = ({ date }) => {
             [editingWorkoutId, i + 1, set.weight, set.reps, set.rest_time]
           );
         }
+        savedWorkoutId = editingWorkoutId;
       } else {
         const dailyWorkoutResult = await db.runAsync(
           'INSERT INTO daily_workouts (date, workout_type_id) VALUES (?, ?)',
           [formattedDate, workoutType.id]
         );
-        const dailyWorkoutId = dailyWorkoutResult.lastInsertRowId;
+        savedWorkoutId = dailyWorkoutResult.lastInsertRowId;
 
         for (let i = 0; i < sets.length; i++) {
           const set = sets[i];
           await db.runAsync(
             'INSERT INTO workout_sets (daily_workout_id, set_number, weight, reps, rest_time) VALUES (?, ?, ?, ?, ?)',
-            [dailyWorkoutId, i + 1, set.weight, set.reps, set.rest_time]
+            [savedWorkoutId, i + 1, set.weight, set.reps, set.rest_time]
           );
         }
       }
+
+      const brokenPRs = await prOperations.checkAndUpdatePRs(
+        db, workoutType.id, savedWorkoutId, formattedDate, sets
+      );
 
       setSelectedWorkout('');
       setSets([{ id: 1, weight: '', reps: '', rest_time: 0 }]);
       setEditingWorkoutId(null);
       await loadSavedWorkouts();
-      
-      Alert.alert('Success', `Workout ${editingWorkoutId ? 'updated' : 'saved'} successfully`);
+
+      if (brokenPRs.length > 0) {
+        const prMessages = brokenPRs.map(pr => `★ ${formatPRMessage(pr)}`).join('\n\n');
+        Alert.alert('New Personal Record! ⭐', prMessages);
+      } else {
+        Alert.alert('Success', `Workout ${editingWorkoutId ? 'updated' : 'saved'} successfully`);
+      }
     } catch (error) {
       console.error('Error saving workout:', error);
       Alert.alert('Error', `Failed to ${editingWorkoutId ? 'update' : 'save'} workout`);
@@ -295,11 +338,13 @@ const Journal = ({ date }) => {
             try {
               setSaving(true);
               
+              await prOperations.restorePRsOnDelete(db, dailyWorkoutId);
+
               await db.runAsync(
                 'DELETE FROM workout_sets WHERE daily_workout_id = ?',
                 [dailyWorkoutId]
               );
-              
+
               await db.runAsync(
                 'DELETE FROM daily_workouts WHERE id = ?',
                 [dailyWorkoutId]
@@ -442,27 +487,58 @@ const Journal = ({ date }) => {
         
         {savedWorkouts.length > 0 && (
           <View style={styles.savedWorkoutsContainer}>
-            <Text style={styles.sectionTitle}>Today's Workouts</Text>
+            <View style={styles.sectionTitleRow}>
+              <Text style={styles.sectionTitle}>Today's Workouts</Text>
+              <TouchableOpacity onPress={() => setShowLegend(!showLegend)} style={styles.legendToggle}>
+                <MaterialCommunityIcons name="star" size={16} color="#FFD700" />
+                <Text style={styles.legendToggleText}>?</Text>
+              </TouchableOpacity>
+            </View>
+            {showLegend && (
+              <View style={styles.legendContainer}>
+                {Object.entries(PR_TYPE_CONFIG).map(([key, config]) => (
+                  <View key={key} style={styles.legendRow}>
+                    <MaterialCommunityIcons name="star" size={14} color={config.color} />
+                    <Text style={styles.legendLabel}>{config.label}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
             
             {savedWorkouts.map((workout) => (
               <View key={workout.daily_workout_id} style={styles.savedWorkoutCard}>
                 <View style={styles.savedWorkoutHeader}>
-                  <Text style={styles.savedWorkoutName}>{workout.workout_name}</Text>
-                    
-                  <TouchableOpacity
-                    onPress={() => editWorkout(workout)}
-                    style={styles.editButton}
-                  >
-                    <Text style={styles.editButtonText}>Edit</Text>
-                  </TouchableOpacity>
+                  <Text style={styles.savedWorkoutName} numberOfLines={1}>{workout.workout_name}</Text>
 
-                  <TouchableOpacity
-                    onPress={() => deleteWorkout(workout.daily_workout_id)}
-                    style={styles.deleteButton}
-                  >
-                    <Text style={styles.deleteButtonText}>Delete</Text>
-                  </TouchableOpacity>
+                  <View style={styles.headerButtons}>
+                    <TouchableOpacity
+                      onPress={() => editWorkout(workout)}
+                      style={styles.editButton}
+                    >
+                      <Text style={styles.editButtonText}>Edit</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      onPress={() => deleteWorkout(workout.daily_workout_id)}
+                      style={styles.deleteButton}
+                    >
+                      <Text style={styles.deleteButtonText}>Delete</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
+                {workout.prTypes && workout.prTypes.length > 0 && (
+                  <View style={styles.prStarsContainer}>
+                    {workout.prTypes.map((prType) => (
+                      <MaterialCommunityIcons
+                        key={prType}
+                        name="star"
+                        size={16}
+                        color={PR_TYPE_CONFIG[prType]?.color || '#FFD700'}
+                        style={styles.prStar}
+                      />
+                    ))}
+                  </View>
+                )}
                 
                 <View style={styles.setsTable}>
                   <View style={styles.setsTableHeader}>
@@ -613,7 +689,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#34495e',
-    marginBottom: 10,
   },
   workoutSelectorButton: {
     backgroundColor: '#f9f9f9',
@@ -736,6 +811,8 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#2c3e50',
+    flex: 1,
+    marginRight: 8,
   },
   deleteButton: {
     backgroundColor: '#e74c3c',
@@ -855,6 +932,55 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: '#34495e',
     marginRight: 8,
+  },
+  headerButtons: {
+    flexDirection: 'row',
+    flexShrink: 0,
+  },
+  sectionTitleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  legendToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f0f0f0',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+  },
+  legendToggleText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#666',
+    marginLeft: 2,
+  },
+  legendContainer: {
+    backgroundColor: '#f8f9fa',
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#eee',
+  },
+  legendRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  legendLabel: {
+    fontSize: 13,
+    color: '#34495e',
+    marginLeft: 8,
+  },
+  prStarsContainer: {
+    flexDirection: 'row',
+    marginBottom: 6,
+  },
+  prStar: {
+    marginRight: 3,
   },
 });
 

@@ -46,7 +46,39 @@ const initDatabase = async () => {
             FOREIGN KEY (daily_workout_id) REFERENCES daily_workouts (id)
           );
         `).then(() => console.log('Workout sets table created successfully'))
-          .catch(error => console.error('Error creating workout_sets table:', error))
+          .catch(error => console.error('Error creating workout_sets table:', error)),
+
+        db.execAsync(`
+          CREATE TABLE IF NOT EXISTS personal_records (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            workout_type_id INTEGER NOT NULL,
+            pr_type TEXT NOT NULL,
+            value REAL NOT NULL,
+            secondary_value REAL,
+            date_achieved TEXT NOT NULL,
+            daily_workout_id INTEGER,
+            FOREIGN KEY (workout_type_id) REFERENCES workout_types (id),
+            FOREIGN KEY (daily_workout_id) REFERENCES daily_workouts (id),
+            UNIQUE(workout_type_id, pr_type, secondary_value)
+          );
+        `).then(() => console.log('Personal records table created successfully'))
+          .catch(error => console.error('Error creating personal_records table:', error)),
+
+        db.execAsync(`
+          CREATE TABLE IF NOT EXISTS pr_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            workout_type_id INTEGER NOT NULL,
+            pr_type TEXT NOT NULL,
+            value REAL NOT NULL,
+            secondary_value REAL,
+            previous_value REAL,
+            date_achieved TEXT NOT NULL,
+            daily_workout_id INTEGER,
+            FOREIGN KEY (workout_type_id) REFERENCES workout_types (id),
+            FOREIGN KEY (daily_workout_id) REFERENCES daily_workouts (id)
+          );
+        `).then(() => console.log('PR history table created successfully'))
+          .catch(error => console.error('Error creating pr_history table:', error))
       ]);
     };
 
@@ -117,4 +149,161 @@ const workoutTypeOperations = {
   }
 };
 
-export { openDB, initDatabase, workoutTypeOperations };
+const comparePR = async (db, workoutTypeId, prType, newValue, secondaryValue, dailyWorkoutId, date, brokenPRs, lowerIsBetter = false) => {
+  const existing = await db.getFirstAsync(
+    `SELECT * FROM personal_records
+     WHERE workout_type_id = ? AND pr_type = ? AND (secondary_value IS ? OR secondary_value = ?)`,
+    [workoutTypeId, prType, secondaryValue, secondaryValue]
+  );
+
+  const isNewRecord = !existing ||
+    (lowerIsBetter ? newValue < existing.value : newValue > existing.value);
+
+  if (isNewRecord) {
+    const previousValue = existing ? existing.value : null;
+
+    if (existing) {
+      await db.runAsync(
+        `UPDATE personal_records SET value = ?, date_achieved = ?, daily_workout_id = ?
+         WHERE id = ?`,
+        [newValue, date, dailyWorkoutId, existing.id]
+      );
+    } else {
+      await db.runAsync(
+        `INSERT INTO personal_records (workout_type_id, pr_type, value, secondary_value, date_achieved, daily_workout_id)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [workoutTypeId, prType, newValue, secondaryValue, date, dailyWorkoutId]
+      );
+    }
+
+    await db.runAsync(
+      `INSERT INTO pr_history (workout_type_id, pr_type, value, secondary_value, previous_value, date_achieved, daily_workout_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [workoutTypeId, prType, newValue, secondaryValue, previousValue, date, dailyWorkoutId]
+    );
+
+    brokenPRs.push({ prType, newValue, previousValue, secondaryValue });
+  }
+};
+
+const prOperations = {
+  checkAndUpdatePRs: async (db, workoutTypeId, dailyWorkoutId, date, sets) => {
+    const brokenPRs = [];
+    const numericSets = sets.map(s => ({
+      weight: parseFloat(s.weight) || 0,
+      reps: parseInt(s.reps) || 0,
+      rest_time: s.rest_time || 0,
+    }));
+
+    // 1. Max weight
+    const maxWeight = Math.max(...numericSets.map(s => s.weight));
+    if (maxWeight > 0) {
+      await comparePR(db, workoutTypeId, 'max_weight', maxWeight, null, dailyWorkoutId, date, brokenPRs);
+    }
+
+    // 2. Max reps at each weight & 3. Max sets at each weight
+    const weightGroups = {};
+    for (const s of numericSets) {
+      if (s.weight > 0) {
+        if (!weightGroups[s.weight]) weightGroups[s.weight] = [];
+        weightGroups[s.weight].push(s);
+      }
+    }
+    for (const [weight, group] of Object.entries(weightGroups)) {
+      const w = parseFloat(weight);
+      const maxReps = Math.max(...group.map(s => s.reps));
+      if (maxReps > 0) {
+        await comparePR(db, workoutTypeId, 'max_reps_at_weight', maxReps, w, dailyWorkoutId, date, brokenPRs);
+      }
+      await comparePR(db, workoutTypeId, 'max_sets_at_weight', group.length, w, dailyWorkoutId, date, brokenPRs);
+    }
+
+    // 4. Best single rest time (lower is better, ignore 0 = not recorded)
+    const restTimes = numericSets.map(s => s.rest_time).filter(t => t > 0);
+    if (restTimes.length > 0) {
+      const bestRest = Math.min(...restTimes);
+      await comparePR(db, workoutTypeId, 'best_single_rest', bestRest, null, dailyWorkoutId, date, brokenPRs, true);
+    }
+
+    // 5. Best average rest time (lower is better)
+    if (restTimes.length > 0) {
+      const avgRest = restTimes.reduce((a, b) => a + b, 0) / restTimes.length;
+      await comparePR(db, workoutTypeId, 'best_avg_rest', avgRest, null, dailyWorkoutId, date, brokenPRs, true);
+    }
+
+    // 6. Max volume single set (weight x reps)
+    const maxVolume = Math.max(...numericSets.map(s => s.weight * s.reps));
+    if (maxVolume > 0) {
+      await comparePR(db, workoutTypeId, 'max_volume_single_set', maxVolume, null, dailyWorkoutId, date, brokenPRs);
+    }
+
+    // 7. Max total tonnage (sum of weight x reps across all sets)
+    const totalTonnage = numericSets.reduce((sum, s) => sum + (s.weight * s.reps), 0);
+    if (totalTonnage > 0) {
+      await comparePR(db, workoutTypeId, 'max_total_tonnage', totalTonnage, null, dailyWorkoutId, date, brokenPRs);
+    }
+
+    return brokenPRs;
+  },
+
+  getPRsForExercise: async (db, workoutTypeId) => {
+    return await db.getAllAsync(
+      'SELECT * FROM personal_records WHERE workout_type_id = ? ORDER BY pr_type',
+      [workoutTypeId]
+    );
+  },
+
+  getAllCurrentPRs: async (db) => {
+    return await db.getAllAsync(
+      `SELECT pr.*, wt.name as exercise_name
+       FROM personal_records pr
+       JOIN workout_types wt ON pr.workout_type_id = wt.id
+       ORDER BY wt.name, pr.pr_type`
+    );
+  },
+
+  getPRTypesForWorkout: async (db, dailyWorkoutId) => {
+    const results = await db.getAllAsync(
+      'SELECT DISTINCT pr_type FROM pr_history WHERE daily_workout_id = ?',
+      [dailyWorkoutId]
+    );
+    return results.map(r => r.pr_type);
+  },
+
+  restorePRsOnDelete: async (db, dailyWorkoutId) => {
+    const affectedPRs = await db.getAllAsync(
+      'SELECT * FROM personal_records WHERE daily_workout_id = ?',
+      [dailyWorkoutId]
+    );
+
+    for (const pr of affectedPRs) {
+      const previousBest = await db.getFirstAsync(
+        `SELECT * FROM pr_history
+         WHERE workout_type_id = ? AND pr_type = ? AND (secondary_value IS ? OR secondary_value = ?)
+           AND daily_workout_id != ?
+         ORDER BY value ${pr.pr_type.includes('rest') ? 'ASC' : 'DESC'}
+         LIMIT 1`,
+        [pr.workout_type_id, pr.pr_type, pr.secondary_value, pr.secondary_value, dailyWorkoutId]
+      );
+
+      if (previousBest) {
+        await db.runAsync(
+          'UPDATE personal_records SET value = ?, date_achieved = ?, daily_workout_id = ? WHERE id = ?',
+          [previousBest.value, previousBest.date_achieved, previousBest.daily_workout_id, pr.id]
+        );
+      } else {
+        await db.runAsync(
+          'DELETE FROM personal_records WHERE id = ?',
+          [pr.id]
+        );
+      }
+    }
+
+    await db.runAsync(
+      'DELETE FROM pr_history WHERE daily_workout_id = ?',
+      [dailyWorkoutId]
+    );
+  },
+};
+
+export { openDB, initDatabase, workoutTypeOperations, prOperations };
