@@ -195,13 +195,11 @@ const prOperations = {
       rest_time: s.rest_time || 0,
     }));
 
-    // 1. Max weight
     const maxWeight = Math.max(...numericSets.map(s => s.weight));
     if (maxWeight > 0) {
       await comparePR(db, workoutTypeId, 'max_weight', maxWeight, null, dailyWorkoutId, date, brokenPRs);
     }
 
-    // 2. Max reps at each weight & 3. Max sets at each weight
     const weightGroups = {};
     for (const s of numericSets) {
       if (s.weight > 0) {
@@ -218,26 +216,22 @@ const prOperations = {
       await comparePR(db, workoutTypeId, 'max_sets_at_weight', group.length, w, dailyWorkoutId, date, brokenPRs);
     }
 
-    // 4. Best single rest time (lower is better, ignore 0 = not recorded)
     const restTimes = numericSets.map(s => s.rest_time).filter(t => t > 0);
     if (restTimes.length > 0) {
       const bestRest = Math.min(...restTimes);
       await comparePR(db, workoutTypeId, 'best_single_rest', bestRest, null, dailyWorkoutId, date, brokenPRs, true);
     }
 
-    // 5. Best average rest time (lower is better)
     if (restTimes.length > 0) {
       const avgRest = restTimes.reduce((a, b) => a + b, 0) / restTimes.length;
       await comparePR(db, workoutTypeId, 'best_avg_rest', avgRest, null, dailyWorkoutId, date, brokenPRs, true);
     }
 
-    // 6. Max volume single set (weight x reps)
     const maxVolume = Math.max(...numericSets.map(s => s.weight * s.reps));
     if (maxVolume > 0) {
       await comparePR(db, workoutTypeId, 'max_volume_single_set', maxVolume, null, dailyWorkoutId, date, brokenPRs);
     }
 
-    // 7. Max total tonnage (sum of weight x reps across all sets)
     const totalTonnage = numericSets.reduce((sum, s) => sum + (s.weight * s.reps), 0);
     if (totalTonnage > 0) {
       await comparePR(db, workoutTypeId, 'max_total_tonnage', totalTonnage, null, dailyWorkoutId, date, brokenPRs);

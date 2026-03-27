@@ -1,23 +1,23 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  View, 
-  TouchableWithoutFeedback, 
-  Keyboard 
-} from 'react-native';
+import React, { useEffect } from 'react';
+import { View, Keyboard, StatusBar } from 'react-native';
+import { PaperProvider } from 'react-native-paper';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { WorkoutProvider } from './src/context/workoutcontext';
+import { ThemeProvider, useAppTheme } from './src/context/themecontext';
 import WeeklyCalendar from './src/components/calendar-strip';
 import WorkoutCard from './src/components/workout-card';
 import Journal from './src/components/journal';
 import { initDatabase } from './src/db/db';
+import { useState } from 'react';
 
-export default function App() {
+function AppContent() {
   const [selectedDate, setSelectedDate] = useState(new Date());
+  const { theme, isDark } = useAppTheme();
 
   useEffect(() => {
     const setupDatabase = async () => {
       try {
         await initDatabase();
-        console.log('Database initialized successfully');
       } catch (error) {
         console.error('Failed to initialize database:', error);
       }
@@ -26,21 +26,37 @@ export default function App() {
   }, []);
 
   return (
-    <WorkoutProvider>
-      <View 
-        style={{ flex: 1, backgroundColor: '#000' }}
+    <PaperProvider theme={theme}>
+      <SafeAreaView
+        style={{ flex: 1, backgroundColor: theme.custom.colors.background }}
         onStartShouldSetResponder={() => {
           Keyboard.dismiss();
           return false;
         }}
         onMoveShouldSetResponder={() => false}
       >
-        <View style={{ paddingTop: 50 }}>
-          <WeeklyCalendar onDateSelect={setSelectedDate} />
-        </View>
+        <StatusBar
+          barStyle={isDark ? 'light-content' : 'dark-content'}
+          backgroundColor={theme.custom.colors.background}
+        />
+        <WeeklyCalendar onDateSelect={setSelectedDate} />
         <WorkoutCard date={selectedDate} />
-        <Journal date={selectedDate} />
-      </View>
-    </WorkoutProvider>
+        <View style={{ flex: 1 }}>
+          <Journal date={selectedDate} />
+        </View>
+      </SafeAreaView>
+    </PaperProvider>
+  );
+}
+
+export default function App() {
+  return (
+    <SafeAreaProvider>
+      <ThemeProvider>
+        <WorkoutProvider>
+          <AppContent />
+        </WorkoutProvider>
+      </ThemeProvider>
+    </SafeAreaProvider>
   );
 }

@@ -1,27 +1,22 @@
 import React, { useState, useEffect } from 'react';
-import { Dimensions } from 'react-native';
+import { View, StyleSheet, Alert } from 'react-native';
+import { Surface, IconButton } from 'react-native-paper';
 import GhostTextInput from './ghost-text';
-import { 
-  View, 
-  TouchableOpacity, 
-  StyleSheet,
-  Alert 
-} from 'react-native';
 import { openDB, workoutTypeOperations } from '../db/db';
 import { useWorkout } from '../context/workoutcontext';
-
-const { width } = Dimensions.get('window');
+import { useAppTheme } from '../context/themecontext';
 
 const WorkoutCard = ({ date }) => {
   const [db, setDb] = useState(null);
   const [workoutName, setWorkoutName] = useState('');
   const [suggestions, setSuggestions] = useState([]);
   const { refreshWorkoutList } = useWorkout();
+  const { theme } = useAppTheme();
+  const c = theme.custom.colors;
 
   useEffect(() => {
     const initDB = async () => {
       const database = await openDB();
-      console.log('Database set in state:', database);
       setDb(database);
     };
     initDB();
@@ -37,7 +32,6 @@ const WorkoutCard = ({ date }) => {
     if (!db) return;
     try {
       const allWorkouts = await workoutTypeOperations.getWorkoutTypes(db);
-      console.log('All Workouts:', allWorkouts);
       setSuggestions(allWorkouts);
     } catch (error) {
       console.error('Error loading workouts:', error);
@@ -64,14 +58,11 @@ const WorkoutCard = ({ date }) => {
 
   const saveWorkoutType = async () => {
     if (!workoutName.trim() || !db) return;
-  
+
     try {
       await workoutTypeOperations.addWorkoutType(db, workoutName.trim());
-      
       const allWorkouts = await workoutTypeOperations.getWorkoutTypes(db);
-      console.log('Refreshed Workouts:', allWorkouts);
       setSuggestions(allWorkouts);
-      
       refreshWorkoutList();
       setWorkoutName('');
     } catch (error) {
@@ -85,26 +76,20 @@ const WorkoutCard = ({ date }) => {
 
   const deleteWorkoutType = async () => {
     if (!workoutName.trim() || !db) return;
-  
+
     Alert.alert(
       'Delete Workout',
       `Are you sure you want to delete "${workoutName}"?`,
       [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
+        { text: 'Cancel', style: 'cancel' },
         {
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
             try {
               await workoutTypeOperations.deleteWorkoutType(db, workoutName.trim());
-              
               const allWorkouts = await workoutTypeOperations.getWorkoutTypes(db);
-              console.log('Refreshed Workouts:', allWorkouts);
               setSuggestions(allWorkouts);
-              
               refreshWorkoutList();
               setWorkoutName('');
             } catch (error) {
@@ -119,7 +104,7 @@ const WorkoutCard = ({ date }) => {
 
   return (
     <View style={styles.container}>
-      <View style={styles.inputButtonWrapper}>
+      <Surface style={[styles.inputButtonWrapper, { backgroundColor: c.surface }]} elevation={2}>
         <View style={styles.inputContainer}>
           <GhostTextInput
             style={styles.input}
@@ -128,111 +113,63 @@ const WorkoutCard = ({ date }) => {
             onFocus={handleInputFocus}
             suggestions={suggestions}
             placeholder="Enter workout name"
-            placeholderTextColor="#888"
             autoCapitalize="words"
           />
         </View>
         <View style={styles.buttonsContainer}>
-          <TouchableOpacity 
-            style={styles.actionButton}
+          <IconButton
+            icon="plus"
+            mode="contained"
+            size={22}
+            iconColor="#FFFFFF"
+            containerColor={c.primary}
             onPress={saveWorkoutType}
-          >
-            <View style={styles.buttonContent}>
-              <View style={styles.plusHorizontal}/>
-              <View style={styles.plusVertical}/>
-            </View>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.actionButton, styles.deleteButton]}
+            style={styles.actionButton}
+          />
+          <IconButton
+            icon="minus"
+            mode="contained"
+            size={22}
+            iconColor="#FFFFFF"
+            containerColor={c.destructive}
             onPress={deleteWorkoutType}
-          >
-            <View style={styles.buttonContent}>
-              <View style={styles.minusHorizontal}/>
-            </View>
-          </TouchableOpacity>
+            style={styles.actionButton}
+          />
         </View>
-      </View>
+      </Surface>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     paddingVertical: 8,
     alignItems: 'center',
-    position: 'relative',
-    top: 250,
   },
   inputButtonWrapper: {
-    width: width - 32,
+    width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'white',
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
   inputContainer: {
     flex: 1,
-    marginRight: 10,
+    marginRight: 8,
   },
   input: {
-    height: 50,
-    backgroundColor: '#f0f0f0',
-    borderRadius: 10,
-    paddingHorizontal: 15,
-    fontSize: 16,
+    height: 48,
+    borderRadius: 12,
   },
   buttonsContainer: {
     flexDirection: 'row',
+    gap: 4,
   },
   actionButton: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: '#3498db',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: 10,
+    margin: 0,
   },
-  deleteButton: {
-    backgroundColor: '#e74c3c',
-  },
-  buttonContent: {
-    position: 'relative',
-    width: 20,
-    height: 20,
-  },
-  plusHorizontal: {
-    position: 'absolute',
-    width: 20,
-    height: 2,
-    backgroundColor: 'white',
-    top: 9,
-    left: 0,
-  },
-  plusVertical: {
-    position: 'absolute',
-    width: 2,
-    height: 20,
-    backgroundColor: 'white',
-    top: 0,
-    left: 9,
-  },
-  minusHorizontal: {
-    position: 'absolute',
-    width: 20,
-    height: 2,
-    backgroundColor: 'white',
-    top: 9,
-    left: 0,
-  }
 });
 
 export default WorkoutCard;

@@ -1,38 +1,41 @@
 import React, { useState } from 'react';
-import { View, TextInput, Text, StyleSheet } from 'react-native';
+import { View, Text, TextInput, StyleSheet } from 'react-native';
+import { useAppTheme } from '../context/themecontext';
 
-const GhostTextInput = ({ 
-  value, 
-  onChangeText, 
-  suggestions, 
-  style, 
+const GhostTextInput = ({
+  value,
+  onChangeText,
+  suggestions,
+  style,
   placeholder,
-  ...props 
+  ...props
 }) => {
   const [ghostText, setGhostText] = useState('');
+  const { theme } = useAppTheme();
+  const c = theme.custom.colors;
 
   const findMatch = (text) => {
     if (!text) {
       setGhostText('');
       return;
     }
-  
+
     const trimmedInput = text.trim();
     const lowerInput = trimmedInput.toLowerCase();
 
     const exactMatch = suggestions.find(
       (suggestion) => suggestion.name.toLowerCase() === lowerInput
     );
-  
+
     if (exactMatch) {
       setGhostText('*');
       return;
     }
-  
+
     const match = suggestions.find((suggestion) =>
       suggestion.name.toLowerCase().startsWith(lowerInput)
     );
-  
+
     if (match) {
       const remaining = match.name.slice(trimmedInput.length);
       setGhostText(`${remaining}*`);
@@ -46,26 +49,34 @@ const GhostTextInput = ({
     findMatch(text);
   };
 
-
-  const displayText = ghostText ? `${value}${ghostText}` : '';
-
   return (
     <View style={styles.container}>
-
       <TextInput
-        style={[styles.input, style]}
+        style={[
+          styles.input,
+          {
+            backgroundColor: c.inputBg,
+            color: c.textPrimary,
+            borderColor: c.border,
+          },
+          style,
+        ]}
         value={value}
         onChangeText={handleChangeText}
         placeholder={placeholder}
+        placeholderTextColor={c.textTertiary}
         {...props}
       />
-      
 
-      <View style={[styles.textOverlay, style, { pointerEvents: 'none' }]}>
-
-        <Text style={styles.inputText}>{value}</Text>
+      <View style={[
+        styles.textOverlay,
+        { backgroundColor: c.inputBg },
+        style,
+        { pointerEvents: 'none' },
+      ]}>
+        <Text style={[styles.inputText, { color: c.textPrimary }]}>{value}</Text>
         {ghostText && (
-          <Text style={styles.ghostText}>{ghostText}</Text>
+          <Text style={[styles.ghostText, { color: c.textTertiary }]}>{ghostText}</Text>
         )}
       </View>
     </View>
@@ -77,14 +88,11 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   input: {
-    height: 40,
+    height: 48,
     borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    paddingHorizontal: 12,
+    borderRadius: 12,
+    paddingHorizontal: 16,
     fontSize: 16,
-    color: '#000',
-    backgroundColor: 'transparent',
   },
   textOverlay: {
     position: 'absolute',
@@ -94,16 +102,14 @@ const styles = StyleSheet.create({
     bottom: 0,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    backgroundColor: 'white',
+    paddingHorizontal: 16,
+    borderRadius: 12,
   },
   inputText: {
     fontSize: 16,
-    color: '#000',
   },
   ghostText: {
     fontSize: 16,
-    color: '#999',
   },
 });
 
