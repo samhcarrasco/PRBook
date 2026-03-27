@@ -333,4 +333,39 @@ const historyOperations = {
   },
 };
 
-export { openDB, initDatabase, workoutTypeOperations, prOperations, historyOperations };
+const dataOperations = {
+  getAllWorkoutData: async (db) => {
+    return await db.getAllAsync(
+      `SELECT dw.date, wt.name AS exercise_name, ws.set_number, ws.weight, ws.reps, ws.rest_time
+       FROM workout_sets ws
+       JOIN daily_workouts dw ON ws.daily_workout_id = dw.id
+       JOIN workout_types wt ON dw.workout_type_id = wt.id
+       ORDER BY dw.date ASC, wt.name ASC, ws.set_number ASC`
+    );
+  },
+
+  getAllDailyWorkoutsOrdered: async (db) => {
+    return await db.getAllAsync(
+      `SELECT dw.id, dw.date, dw.workout_type_id
+       FROM daily_workouts dw
+       ORDER BY dw.date ASC`
+    );
+  },
+
+  getSetsForWorkout: async (db, dailyWorkoutId) => {
+    return await db.getAllAsync(
+      `SELECT set_number, weight, reps, rest_time
+       FROM workout_sets
+       WHERE daily_workout_id = ?
+       ORDER BY set_number ASC`,
+      [dailyWorkoutId]
+    );
+  },
+
+  clearAllPRData: async (db) => {
+    await db.execAsync('DELETE FROM pr_history');
+    await db.execAsync('DELETE FROM personal_records');
+  },
+};
+
+export { openDB, initDatabase, workoutTypeOperations, prOperations, historyOperations, dataOperations };

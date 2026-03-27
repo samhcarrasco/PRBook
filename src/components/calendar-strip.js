@@ -5,10 +5,12 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import moment from 'moment';
 import { useAppTheme } from '../context/themecontext';
+import DataManagementModal from './data-management-modal';
 
 const WeeklyCalendar = ({ onDateSelect }) => {
   const [selectedDate, setSelectedDate] = useState(moment());
   const [isDatePickerVisible, setDatePickerVisible] = useState(false);
+  const [dataModalVisible, setDataModalVisible] = useState(false);
   const { theme, isDark, toggleTheme } = useAppTheme();
   const c = theme.custom.colors;
 
@@ -92,12 +94,20 @@ const WeeklyCalendar = ({ onDateSelect }) => {
         >
           Jump to Date
         </Button>
-        <IconButton
-          icon={isDark ? 'weather-sunny' : 'weather-night'}
-          size={20}
-          onPress={toggleTheme}
-          iconColor={c.textSecondary}
-        />
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <IconButton
+            icon="cog-outline"
+            size={20}
+            onPress={() => setDataModalVisible(true)}
+            iconColor={c.textSecondary}
+          />
+          <IconButton
+            icon={isDark ? 'weather-sunny' : 'weather-night'}
+            size={20}
+            onPress={toggleTheme}
+            iconColor={c.textSecondary}
+          />
+        </View>
       </View>
 
       <Text style={[styles.headerText, { color: c.textPrimary }]}>
@@ -124,6 +134,11 @@ const WeeklyCalendar = ({ onDateSelect }) => {
         onConfirm={handleConfirm}
         onCancel={hideDatePicker}
         date={selectedDate.toDate()}
+      />
+
+      <DataManagementModal
+        visible={dataModalVisible}
+        onDismiss={() => setDataModalVisible(false)}
       />
     </Surface>
   );
