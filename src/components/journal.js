@@ -475,7 +475,7 @@ const Journal = ({ date, isActive = true }) => {
                 disabled={saving}
                 labelStyle={styles.changeButtonLabel}
               >
-                Change
+                Back to selection
               </Button>
             </Surface>
           )}
