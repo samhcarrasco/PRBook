@@ -5,7 +5,7 @@ import { useAppTheme } from '../context/themecontext';
 
 const RestTimer = ({ onTimerUpdate, initialTime = 0 }) => {
   const [isRunning, setIsRunning] = useState(false);
-  const [elapsedTime, setElapsedTime] = useState(initialTime);
+  const [elapsedMs, setElapsedMs] = useState(initialTime * 1000);
   const timerRef = useRef(null);
   const previousTimeRef = useRef(initialTime);
   const { theme } = useAppTheme();
@@ -19,7 +19,7 @@ const RestTimer = ({ onTimerUpdate, initialTime = 0 }) => {
   }, [onTimerUpdate]);
 
   useEffect(() => {
-    setElapsedTime(initialTime);
+    setElapsedMs(initialTime * 1000);
     previousTimeRef.current = initialTime;
   }, [initialTime]);
 
@@ -31,15 +31,20 @@ const RestTimer = ({ onTimerUpdate, initialTime = 0 }) => {
     };
   }, []);
 
+  const startTimeRef = useRef(null);
+
   useEffect(() => {
     if (isRunning) {
+      startTimeRef.current = Date.now() - elapsedMs;
       timerRef.current = setInterval(() => {
-        setElapsedTime(prevTime => {
-          const newTime = prevTime + 1;
-          handleTimerUpdate(newTime);
-          return newTime;
-        });
-      }, 1000);
+        const now = Date.now();
+        const newMs = now - startTimeRef.current;
+        setElapsedMs(newMs);
+        const newSeconds = Math.floor(newMs / 1000);
+        if (newSeconds !== previousTimeRef.current) {
+          handleTimerUpdate(newSeconds);
+        }
+      }, 10);
     } else if (timerRef.current) {
       clearInterval(timerRef.current);
     }
@@ -55,14 +60,16 @@ const RestTimer = ({ onTimerUpdate, initialTime = 0 }) => {
   const stopTimer = () => setIsRunning(false);
   const resetTimer = () => {
     setIsRunning(false);
-    setElapsedTime(0);
+    setElapsedMs(0);
     handleTimerUpdate(0);
   };
 
-  const formatTime = (totalSeconds) => {
+  const formatTime = (ms) => {
+    const totalSeconds = Math.floor(ms / 1000);
     const minutes = Math.floor(totalSeconds / 60);
     const seconds = totalSeconds % 60;
-    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    const milliseconds = Math.floor((ms % 1000) / 10);
+    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(2, '0')}`;
   };
 
   return (
@@ -71,7 +78,7 @@ const RestTimer = ({ onTimerUpdate, initialTime = 0 }) => {
         styles.timerText,
         { color: isRunning ? c.success : c.textPrimary }
       ]}>
-        {formatTime(elapsedTime)}
+        {formatTime(elapsedMs)}
       </Text>
       <View style={styles.buttonContainer}>
         {!isRunning ? (
@@ -122,7 +129,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontVariant: ['tabular-nums'],
     marginRight: 4,
-    width: 52,
+    width: 76,
   },
   buttonContainer: {
     flexDirection: 'row',
