@@ -1,26 +1,35 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { 
-  View, 
-  Text, 
+import React, { useState, useEffect } from 'react';
+import {
+  View,
+  Text,
   TextInput,
-  TouchableOpacity, 
-  StyleSheet, 
-  Dimensions,
+  StyleSheet,
   Alert,
-  ActivityIndicator,
   FlatList,
   Keyboard,
-  Animated,
-  Platform
+  Platform,
+  KeyboardAvoidingView,
 } from 'react-native';
-import { Picker } from '@react-native-picker/picker';
-import { openDB, workoutTypeOperations } from '../db/db';
+import {
+  Surface,
+  Button,
+  IconButton,
+  Chip,
+  Modal,
+  Portal,
+  ActivityIndicator,
+  DataTable,
+  TouchableRipple,
+} from 'react-native-paper';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
+import { openDB, workoutTypeOperations, prOperations } from '../db/db';
 import { useWorkout } from '../context/workoutcontext';
+import { useAppTheme } from '../context/themecontext';
+import { PR_TYPE_CONFIG } from '../theme/theme';
 import RestTimer from './rest-timer';
 
-const { width, height } = Dimensions.get('window');
-
-const Journal = ({ date }) => {
+const Journal = ({ date, isActive = true }) => {
   const [db, setDb] = useState(null);
   const [workoutTypes, setWorkoutTypes] = useState([]);
   const [selectedWorkout, setSelectedWorkout] = useState('');
@@ -29,49 +38,23 @@ const Journal = ({ date }) => {
   const [saving, setSaving] = useState(false);
   const [savedWorkouts, setSavedWorkouts] = useState([]);
   const [showPicker, setShowPicker] = useState(false);
-  const { workoutListVersion } = useWorkout();
-  const [keyboardHeight] = useState(new Animated.Value(0));
+  const {
+    workoutListVersion,
+    workoutHistoryVersion,
+    refreshWorkoutHistory,
+  } = useWorkout();
   const [editingWorkoutId, setEditingWorkoutId] = useState(null);
   const [originalSets, setOriginalSets] = useState([]);
-  const [isJournalInputFocused, setIsJournalInputFocused] = useState(false);
-  const isJournalInputFocusedRef = useRef(false);
+  const [showLegend, setShowLegend] = useState(false);
+  const { theme } = useAppTheme();
+  const c = theme.custom.colors;
 
   useEffect(() => {
-    const keyboardWillShow = (event) => {
-      setTimeout(() => {
-        if (isJournalInputFocusedRef.current) {
-          Animated.timing(keyboardHeight, {
-            duration: Platform.OS === 'ios' ? event.duration : 250,
-            toValue: event.endCoordinates.height,
-            useNativeDriver: false,
-          }).start();
-        }
-      }, 50);
-    };
-
-    const keyboardWillHide = (event) => {
-      Animated.timing(keyboardHeight, {
-        duration: Platform.OS === 'ios' ? event.duration : 250,
-        toValue: 0,
-        useNativeDriver: false,
-      }).start();
-      setIsJournalInputFocused(false);
-      isJournalInputFocusedRef.current = false;
-    };
-
-    const showListener = Platform.OS === 'ios' 
-      ? Keyboard.addListener('keyboardWillShow', keyboardWillShow)
-      : Keyboard.addListener('keyboardDidShow', keyboardWillShow);
-      
-    const hideListener = Platform.OS === 'ios'
-      ? Keyboard.addListener('keyboardWillHide', keyboardWillHide)
-      : Keyboard.addListener('keyboardDidHide', keyboardWillHide);
-
-    return () => {
-      showListener.remove();
-      hideListener.remove();
-    };
-  }, [keyboardHeight, isJournalInputFocused]);
+    if (!isActive) {
+      Keyboard.dismiss();
+      setShowPicker(false);
+    }
+  }, [isActive]);
 
   useEffect(() => {
     const initDB = async () => {
@@ -84,20 +67,21 @@ const Journal = ({ date }) => {
         setLoading(false);
       }
     };
-    
     initDB();
   }, []);
-  
+
   useEffect(() => {
     if (db) {
       loadWorkoutTypes();
-      if (date) {
-        loadSavedWorkouts();
-      }
     }
-  }, [db, date, workoutListVersion]);
+  }, [db, workoutListVersion]);
 
-  // Helper function to format rest time (seconds) to MM:SS
+  useEffect(() => {
+    if (db && date) {
+      loadSavedWorkouts();
+    }
+  }, [db, date, workoutHistoryVersion]);
+
   const formatRestTime = (seconds) => {
     const minutes = Math.floor(seconds / 60);
     const remainingSeconds = seconds % 60;
@@ -106,7 +90,6 @@ const Journal = ({ date }) => {
 
   const loadWorkoutTypes = async () => {
     if (!db) return;
-    
     try {
       const types = await workoutTypeOperations.getWorkoutTypes(db);
       setWorkoutTypes(types);
@@ -117,18 +100,17 @@ const Journal = ({ date }) => {
 
   const loadSavedWorkouts = async () => {
     if (!db || !date) return;
-    
     try {
       setLoading(true);
       const formattedDate = formatDate(date);
-      
+
       const workouts = await db.getAllAsync(`
         SELECT dw.id as daily_workout_id, wt.name as workout_name, wt.id as workout_type_id
         FROM daily_workouts dw
         JOIN workout_types wt ON dw.workout_type_id = wt.id
         WHERE dw.date = ?
       `, [formattedDate]);
-      
+
       const workoutsWithSets = await Promise.all(workouts.map(async (workout) => {
         const sets = await db.getAllAsync(`
           SELECT id, set_number, weight, reps, rest_time
@@ -136,20 +118,18 @@ const Journal = ({ date }) => {
           WHERE daily_workout_id = ?
           ORDER BY set_number
         `, [workout.daily_workout_id]);
-        
-        return {
-          ...workout,
-          sets: sets
-        };
+
+        const prTypes = await prOperations.getPRTypesForWorkout(db, workout.daily_workout_id);
+
+        return { ...workout, sets, prTypes };
       }));
-      
+
       setSavedWorkouts(workoutsWithSets);
-      
+
       if (workoutsWithSets.length === 0) {
         setSelectedWorkout('');
         setSets([{ id: 1, weight: '', reps: '', rest_time: 0 }]);
       }
-      
     } catch (error) {
       console.error('Error loading saved workouts:', error);
     } finally {
@@ -160,8 +140,11 @@ const Journal = ({ date }) => {
   const formatDate = (dateObj) => {
     if (!dateObj) return '';
     if (typeof dateObj === 'string') return dateObj;
-    
-    return dateObj.toISOString().split('T')[0];
+
+    const year = dateObj.getFullYear();
+    const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const day = String(dateObj.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   };
 
   const addSet = () => {
@@ -174,33 +157,29 @@ const Journal = ({ date }) => {
       Alert.alert('Error', 'At least one set is required');
       return;
     }
-  
+
     if (editingWorkoutId) {
       const setToDelete = originalSets.find(set => set.id === id);
       if (setToDelete) {
         try {
-          await db.runAsync(
-            'DELETE FROM workout_sets WHERE id = ?',
-            [setToDelete.id]
-          );
+          await db.runAsync('DELETE FROM workout_sets WHERE id = ?', [setToDelete.id]);
         } catch (error) {
           console.error('Error deleting set:', error);
         }
       }
     }
-  
+
     setSets(sets.filter(set => set.id !== id));
   };
 
   const updateSetValue = (id, field, value) => {
-    setSets(sets.map(set => 
+    setSets(sets.map(set =>
       set.id === id ? { ...set, [field]: value } : set
     ));
   };
 
-  // Add new function to update rest time
   const updateRestTime = (id, time) => {
-    setSets(sets.map(set => 
+    setSets(sets.map(set =>
       set.id === id ? { ...set, rest_time: time } : set
     ));
   };
@@ -218,7 +197,25 @@ const Journal = ({ date }) => {
     setShowPicker(false);
   };
 
+  const formatPRMessage = (pr) => {
+    const label = PR_TYPE_CONFIG[pr.prType]?.label || pr.prType;
+    const atWeight = pr.secondaryValue ? ` at ${pr.secondaryValue} lbs` : '';
+    const isRest = pr.prType.includes('rest');
+    const formatVal = (v) => {
+      if (isRest) {
+        const mins = Math.floor(v / 60);
+        const secs = Math.round(v % 60);
+        return `${mins}:${secs.toString().padStart(2, '0')}`;
+      }
+      return Math.round(v * 100) / 100;
+    };
+    const prev = pr.previousValue != null ? ` (previous: ${formatVal(pr.previousValue)}${atWeight})` : ' (first record!)';
+    return `${label}${atWeight}: ${formatVal(pr.newValue)}${prev}`;
+  };
+
   const saveWorkout = async () => {
+    Keyboard.dismiss();
+
     if (!db || !date || !selectedWorkout || sets.length === 0) {
       Alert.alert('Error', 'Please select a workout and add at least one set');
       return;
@@ -234,15 +231,12 @@ const Journal = ({ date }) => {
       setSaving(true);
       const formattedDate = formatDate(date);
       const workoutType = workoutTypes.find(wt => wt.name === selectedWorkout);
-
       if (!workoutType) throw new Error('Selected workout type not found');
 
-      if (editingWorkoutId) {
-        await db.runAsync(
-          'DELETE FROM workout_sets WHERE daily_workout_id = ?',
-          [editingWorkoutId]
-        );
+      let savedWorkoutId;
 
+      if (editingWorkoutId) {
+        await db.runAsync('DELETE FROM workout_sets WHERE daily_workout_id = ?', [editingWorkoutId]);
         for (let i = 0; i < sets.length; i++) {
           const set = sets[i];
           await db.runAsync(
@@ -250,28 +244,40 @@ const Journal = ({ date }) => {
             [editingWorkoutId, i + 1, set.weight, set.reps, set.rest_time]
           );
         }
+        savedWorkoutId = editingWorkoutId;
       } else {
         const dailyWorkoutResult = await db.runAsync(
           'INSERT INTO daily_workouts (date, workout_type_id) VALUES (?, ?)',
           [formattedDate, workoutType.id]
         );
-        const dailyWorkoutId = dailyWorkoutResult.lastInsertRowId;
-
+        savedWorkoutId = dailyWorkoutResult.lastInsertRowId;
         for (let i = 0; i < sets.length; i++) {
           const set = sets[i];
           await db.runAsync(
             'INSERT INTO workout_sets (daily_workout_id, set_number, weight, reps, rest_time) VALUES (?, ?, ?, ?, ?)',
-            [dailyWorkoutId, i + 1, set.weight, set.reps, set.rest_time]
+            [savedWorkoutId, i + 1, set.weight, set.reps, set.rest_time]
           );
         }
       }
+
+      const brokenPRs = await prOperations.checkAndUpdatePRs(
+        db, workoutType.id, savedWorkoutId, formattedDate, sets
+      );
 
       setSelectedWorkout('');
       setSets([{ id: 1, weight: '', reps: '', rest_time: 0 }]);
       setEditingWorkoutId(null);
       await loadSavedWorkouts();
-      
-      Alert.alert('Success', `Workout ${editingWorkoutId ? 'updated' : 'saved'} successfully`);
+      refreshWorkoutHistory();
+
+      if (brokenPRs.length > 0) {
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        const prMessages = brokenPRs.map(pr => `★ ${formatPRMessage(pr)}`).join('\n\n');
+        Alert.alert('New Personal Record! ⭐', prMessages);
+      } else {
+        await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        Alert.alert('Success', `Workout ${editingWorkoutId ? 'updated' : 'saved'} successfully`);
+      }
     } catch (error) {
       console.error('Error saving workout:', error);
       Alert.alert('Error', `Failed to ${editingWorkoutId ? 'update' : 'save'} workout`);
@@ -282,31 +288,23 @@ const Journal = ({ date }) => {
 
   const deleteWorkout = async (dailyWorkoutId) => {
     if (!db) return;
-    
+
     Alert.alert(
       'Delete Workout',
       'Are you sure you want to delete this workout?',
       [
         { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Delete', 
+        {
+          text: 'Delete',
           style: 'destructive',
           onPress: async () => {
             try {
               setSaving(true);
-              
-              await db.runAsync(
-                'DELETE FROM workout_sets WHERE daily_workout_id = ?',
-                [dailyWorkoutId]
-              );
-              
-              await db.runAsync(
-                'DELETE FROM daily_workouts WHERE id = ?',
-                [dailyWorkoutId]
-              );
-              
+              await prOperations.restorePRsOnDelete(db, dailyWorkoutId);
+              await db.runAsync('DELETE FROM workout_sets WHERE daily_workout_id = ?', [dailyWorkoutId]);
+              await db.runAsync('DELETE FROM daily_workouts WHERE id = ?', [dailyWorkoutId]);
               await loadSavedWorkouts();
-              
+              refreshWorkoutHistory();
             } catch (error) {
               console.error('Error deleting workout:', error);
               Alert.alert('Error', 'Failed to delete workout');
@@ -318,411 +316,511 @@ const Journal = ({ date }) => {
       ]
     );
   };
+
+  const renderSetRow = (set, index) => (
+    <View
+      key={set.id}
+      style={[styles.setRow, { borderLeftColor: c.primary }]}
+    >
+      <View style={styles.setHeader}>
+        <Text style={[styles.setNumber, { color: c.primary }]}>Set {index + 1}</Text>
+        <IconButton
+          icon="close-circle"
+          size={20}
+          iconColor={c.destructive}
+          onPress={() => removeSet(set.id)}
+          disabled={saving}
+          style={styles.removeSetButton}
+        />
+      </View>
+
+      <View style={styles.inputGroup}>
+        <View style={styles.inputWrapper}>
+          <Text style={[styles.inputLabel, { color: c.textTertiary }]}>Weight</Text>
+          <TextInput
+            style={[styles.input, { backgroundColor: c.inputBg, color: c.textPrimary, borderColor: c.border }]}
+            placeholder="0"
+            placeholderTextColor={c.textTertiary}
+            value={set.weight}
+            onChangeText={(value) => updateSetValue(set.id, 'weight', value)}
+            keyboardType="numeric"
+            editable={!saving}
+          />
+        </View>
+
+        <View style={styles.inputWrapper}>
+          <Text style={[styles.inputLabel, { color: c.textTertiary }]}>Reps</Text>
+          <TextInput
+            style={[styles.input, { backgroundColor: c.inputBg, color: c.textPrimary, borderColor: c.border }]}
+            placeholder="0"
+            placeholderTextColor={c.textTertiary}
+            value={set.reps}
+            onChangeText={(value) => updateSetValue(set.id, 'reps', value)}
+            keyboardType="numeric"
+            editable={!saving}
+          />
+        </View>
+      </View>
+
+      <View style={styles.restTimerContainer}>
+        <Text style={[styles.restTimerLabel, { color: c.textSecondary }]}>Rest</Text>
+        <RestTimer
+          initialTime={set.rest_time || 0}
+          onTimerUpdate={(time) => {
+            if (time !== set.rest_time) {
+              updateRestTime(set.id, time);
+            }
+          }}
+        />
+      </View>
+    </View>
+  );
+
+  const renderSavedWorkoutCard = (workout, index) => (
+    <View
+      key={workout.daily_workout_id}
+    >
+      <Surface style={[styles.savedWorkoutCard, { backgroundColor: c.surfaceVariant }]} elevation={1}>
+        <View style={styles.savedWorkoutHeader}>
+          <View style={styles.workoutNameRow}>
+            <Text style={[styles.savedWorkoutName, { color: c.textPrimary }]} numberOfLines={1}>
+              {workout.workout_name}
+            </Text>
+            {workout.prTypes && workout.prTypes.length > 0 && (
+              <View style={styles.prStarsContainer}>
+                {workout.prTypes.map((prType) => (
+                  <MaterialCommunityIcons
+                    key={prType}
+                    name="star"
+                    size={16}
+                    color={PR_TYPE_CONFIG[prType]?.color || '#FBBF24'}
+                    style={styles.prStar}
+                  />
+                ))}
+              </View>
+            )}
+          </View>
+          <View style={styles.headerButtons}>
+            <IconButton
+              icon="pencil-outline"
+              size={18}
+              iconColor={c.primary}
+              onPress={() => editWorkout(workout)}
+              style={styles.cardActionButton}
+            />
+            <IconButton
+              icon="delete-outline"
+              size={18}
+              iconColor={c.destructive}
+              onPress={() => deleteWorkout(workout.daily_workout_id)}
+              style={styles.cardActionButton}
+            />
+          </View>
+        </View>
+
+        <DataTable style={[styles.dataTable, { borderColor: c.border }]}>
+          <DataTable.Header style={[styles.dataTableHeader, { backgroundColor: c.background }]}>
+            <DataTable.Title textStyle={[styles.tableHeaderText, { color: c.textSecondary }]}>Set</DataTable.Title>
+            <DataTable.Title numeric textStyle={[styles.tableHeaderText, { color: c.textSecondary }]}>Weight</DataTable.Title>
+            <DataTable.Title numeric textStyle={[styles.tableHeaderText, { color: c.textSecondary }]}>Reps</DataTable.Title>
+            <DataTable.Title numeric textStyle={[styles.tableHeaderText, { color: c.textSecondary }]}>Rest</DataTable.Title>
+          </DataTable.Header>
+          {workout.sets.map((set) => (
+            <DataTable.Row key={set.id} style={[styles.dataTableRow, { borderBottomColor: c.border }]}>
+              <DataTable.Cell textStyle={[styles.tableCellText, { color: c.textPrimary }]}>{set.set_number}</DataTable.Cell>
+              <DataTable.Cell numeric textStyle={[styles.tableCellText, { color: c.textPrimary }]}>{set.weight}</DataTable.Cell>
+              <DataTable.Cell numeric textStyle={[styles.tableCellText, { color: c.textPrimary }]}>{set.reps}</DataTable.Cell>
+              <DataTable.Cell numeric textStyle={[styles.tableCellText, { color: c.textTertiary }]}>
+                {formatRestTime(set.rest_time || 0)}
+              </DataTable.Cell>
+            </DataTable.Row>
+          ))}
+        </DataTable>
+      </Surface>
+    </View>
+  );
+
   const renderJournalContent = () => {
     return (
       <>
         <View style={styles.addWorkoutContainer}>
-          <Text style={styles.sectionTitle}>Add New Workout</Text>
-          
+          <Text style={[styles.sectionTitle, { color: c.textPrimary }]}>Add New Workout</Text>
+
           {!selectedWorkout ? (
-            <TouchableOpacity 
-              style={styles.workoutSelectorButton}
+            <TouchableRipple
+              style={[styles.workoutSelectorButton, { backgroundColor: c.surfaceVariant, borderColor: c.border }]}
               onPress={() => setShowPicker(true)}
               disabled={saving}
+              borderless
+              rippleColor={c.primary + '20'}
             >
-              <Text style={styles.workoutSelectorText}>Select a workout...</Text>
-            </TouchableOpacity>
+              <View style={styles.selectorContent}>
+                <MaterialCommunityIcons name="dumbbell" size={20} color={c.textTertiary} />
+                <Text style={[styles.workoutSelectorText, { color: c.textTertiary }]}>Select a workout...</Text>
+              </View>
+            </TouchableRipple>
           ) : (
-            <View style={styles.selectedWorkoutContainer}>
-              <Text style={styles.selectedWorkoutText}>{selectedWorkout}</Text>
-              <TouchableOpacity
-                style={styles.clearWorkoutButton}
+            <Surface style={[styles.selectedWorkoutContainer, { backgroundColor: c.successContainer }]} elevation={0}>
+              <View style={styles.selectedWorkoutRow}>
+                <MaterialCommunityIcons name="check-circle" size={20} color={c.success} />
+                <Text style={[styles.selectedWorkoutText, { color: c.textPrimary }]}>{selectedWorkout}</Text>
+              </View>
+              <Button
+                mode="contained-tonal"
+                compact
                 onPress={() => {
                   setSelectedWorkout('');
                   setSets([{ id: 1, weight: '', reps: '', rest_time: 0 }]);
                 }}
                 disabled={saving}
+                labelStyle={styles.changeButtonLabel}
               >
-                <Text style={styles.clearWorkoutButtonText}>Change</Text>
-              </TouchableOpacity>
-            </View>
+                Back to selection
+              </Button>
+            </Surface>
           )}
-          
+
           {selectedWorkout ? (
             <>
-              {sets.map((set, index) => (
-                <View key={set.id} style={styles.setRow}>
-                  <Text style={styles.setNumber}>Set {index + 1}</Text>
-                  
-                  <View style={styles.inputGroup}>
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Weight"
-                      value={set.weight}
-                      onChangeText={(value) => updateSetValue(set.id, 'weight', value)}
-                      onFocus={() => {
-                        setIsJournalInputFocused(true);
-                        isJournalInputFocusedRef.current = true;
-                      }}
-                      keyboardType="numeric"
-                      editable={!saving}
-                    />
-                    
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Reps"
-                      value={set.reps}
-                      onChangeText={(value) => updateSetValue(set.id, 'reps', value)}
-                      onFocus={() => {
-                        setIsJournalInputFocused(true);
-                        isJournalInputFocusedRef.current = true;
-                      }}
-                      keyboardType="numeric"
-                      editable={!saving}
-                    />
-                    
-                    <TouchableOpacity
-                      style={[styles.setButton, styles.removeButton]}
-                      onPress={() => removeSet(set.id)}
-                      disabled={saving}
-                    >
-                      <Text style={styles.setButtonText}>-</Text>
-                    </TouchableOpacity>
-                  </View>
-                  
-                  {/* Rest Timer */}
-                  <View style={styles.restTimerContainer}>
-                    <Text style={styles.restTimerLabel}>Rest:</Text>
-                    <RestTimer 
-                      initialTime={set.rest_time || 0}
-                      onTimerUpdate={(time) => {
-                        // Only update if the time has changed
-                        if (time !== set.rest_time) {
-                          updateRestTime(set.id, time);
-                        }
-                      }} 
-                    />
-                  </View>
-                </View>
-              ))}
-              
-              <TouchableOpacity
-                style={styles.addSetButton}
+              {sets.map((set, index) => renderSetRow(set, index))}
+
+              <Button
+                mode="outlined"
                 onPress={addSet}
                 disabled={saving}
+                icon="plus"
+                style={[styles.addSetButton, { borderColor: c.primary }]}
+                labelStyle={{ color: c.primary }}
               >
-                <Text style={styles.addSetButtonText}>+ Add Set</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={[styles.saveButton, saving && styles.savingButton]}
+                Add Set
+              </Button>
+
+              <Button
+                mode="contained"
                 onPress={saveWorkout}
                 disabled={saving}
+                loading={saving}
+                icon={editingWorkoutId ? 'content-save-edit' : 'content-save'}
+                style={[styles.saveButton, { backgroundColor: c.success }]}
+                labelStyle={styles.saveButtonLabel}
               >
-                <Text style={styles.saveButtonText}>
-                  {saving ? 'Saving...' : editingWorkoutId ? 'Update Workout' : 'Save Workout'}
-                </Text>
-              </TouchableOpacity>
+                {saving ? 'Saving...' : editingWorkoutId ? 'Update Workout' : 'Save Workout'}
+              </Button>
+
               {editingWorkoutId && (
-                <TouchableOpacity
-                  style={[styles.saveButton, styles.cancelButton]}
+                <Button
+                  mode="outlined"
                   onPress={() => {
                     setSelectedWorkout('');
                     setSets([{ id: 1, weight: '', reps: '', rest_time: 0 }]);
                     setEditingWorkoutId(null);
                   }}
                   disabled={saving}
+                  style={styles.cancelButton}
+                  textColor={c.textSecondary}
                 >
-                  <Text style={styles.saveButtonText}>Cancel Edit</Text>
-                </TouchableOpacity>
+                  Cancel Edit
+                </Button>
               )}
             </>
           ) : null}
         </View>
-        
+
         {savedWorkouts.length > 0 && (
           <View style={styles.savedWorkoutsContainer}>
-            <Text style={styles.sectionTitle}>Today's Workouts</Text>
-            
-            {savedWorkouts.map((workout) => (
-              <View key={workout.daily_workout_id} style={styles.savedWorkoutCard}>
-                <View style={styles.savedWorkoutHeader}>
-                  <Text style={styles.savedWorkoutName}>{workout.workout_name}</Text>
-                    
-                  <TouchableOpacity
-                    onPress={() => editWorkout(workout)}
-                    style={styles.editButton}
-                  >
-                    <Text style={styles.editButtonText}>Edit</Text>
-                  </TouchableOpacity>
+            <View style={styles.sectionTitleRow}>
+              <Text style={[styles.sectionTitle, { color: c.textPrimary }]}>Today's Workouts</Text>
+              <Chip
+                icon={() => <MaterialCommunityIcons name="star" size={14} color="#FBBF24" />}
+                onPress={() => setShowLegend(!showLegend)}
+                compact
+                style={[styles.legendChip, { backgroundColor: c.surfaceVariant }]}
+                textStyle={[styles.legendChipText, { color: c.textSecondary }]}
+              >
+                PR Guide
+              </Chip>
+            </View>
 
-                  <TouchableOpacity
-                    onPress={() => deleteWorkout(workout.daily_workout_id)}
-                    style={styles.deleteButton}
-                  >
-                    <Text style={styles.deleteButtonText}>Delete</Text>
-                  </TouchableOpacity>
-                </View>
-                
-                <View style={styles.setsTable}>
-                  <View style={styles.setsTableHeader}>
-                    <Text style={[styles.setsTableCell, styles.setNumberCell]}>Set</Text>
-                    <Text style={[styles.setsTableCell, styles.weightCell]}>Weight</Text>
-                    <Text style={[styles.setsTableCell, styles.repsCell]}>Reps</Text>
-                    <Text style={[styles.setsTableCell, styles.restTimeCell]}>Rest</Text>
+            {showLegend && (
+              <Surface style={[styles.legendContainer, { backgroundColor: c.surfaceVariant }]} elevation={0}>
+                {Object.entries(PR_TYPE_CONFIG).map(([key, config]) => (
+                  <View key={key} style={styles.legendRow}>
+                    <MaterialCommunityIcons name="star" size={14} color={config.color} />
+                    <Text style={[styles.legendLabel, { color: c.textSecondary }]}>{config.label}</Text>
                   </View>
-                  
-                  {workout.sets.map((set) => (
-                    <View key={set.id} style={styles.setsTableRow}>
-                      <Text style={[styles.setsTableCell, styles.setNumberCell]}>{set.set_number}</Text>
-                      <Text style={[styles.setsTableCell, styles.weightCell]}>{set.weight}</Text>
-                      <Text style={[styles.setsTableCell, styles.repsCell]}>{set.reps}</Text>
-                      <Text style={[styles.setsTableCell, styles.restTimeCell]}>
-                        {formatRestTime(set.rest_time || 0)}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
-              </View>
-            ))}
+                ))}
+              </Surface>
+            )}
+
+            {savedWorkouts.map((workout, index) => renderSavedWorkoutCard(workout, index))}
+          </View>
+        )}
+
+        {!loading && savedWorkouts.length === 0 && !selectedWorkout && (
+          <View style={styles.emptyState}>
+            <MaterialCommunityIcons name="weight-lifter" size={48} color={c.textTertiary} />
+            <Text style={[styles.emptyStateTitle, { color: c.textSecondary }]}>No workouts yet</Text>
+            <Text style={[styles.emptyStateSubtitle, { color: c.textTertiary }]}>
+              Select a workout above to start logging
+            </Text>
           </View>
         )}
       </>
     );
   };
 
-  if (loading) {
+  if (loading && savedWorkouts.length === 0) {
     return (
-      <View style={styles.container}>
-        <View style={styles.journalContainer}>
-          <ActivityIndicator size="large" color="#3498db" />
-        </View>
-      </View>
+      <Surface style={[styles.journalContainer, { backgroundColor: c.surface }]} elevation={2}>
+        <ActivityIndicator animating size="large" color={c.primary} style={{ marginTop: 40 }} />
+      </Surface>
     );
   }
 
   return (
-    <Animated.View 
-      style={[
-        styles.container,
-        {
-          transform: [{
-            translateY: keyboardHeight.interpolate({
-              inputRange: [0, height],
-              outputRange: [0, -height],
-            })
-          }]
-        }
-      ]}
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      enabled={isActive}
     >
-      <View style={styles.journalContainer}>
-        <Text style={styles.headerText}>Workout Journal</Text>
-        
+      <Surface style={[styles.journalContainer, { backgroundColor: c.surface }]} elevation={2}>
+        <Text style={[styles.headerText, { color: c.textPrimary }]}>Workout Journal</Text>
+
         <FlatList
           data={[{ key: 'journal_content' }]}
           renderItem={() => renderJournalContent()}
           keyExtractor={item => item.key}
           style={styles.scrollableContent}
           contentContainerStyle={styles.scrollContentContainer}
-          showsVerticalScrollIndicator={true}
+          showsVerticalScrollIndicator={false}
           scrollEventThrottle={16}
           bounces={true}
           overScrollMode="always"
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
         />
-      </View>
-      
-      {showPicker && (
-        <View style={styles.pickerOverlay}>
-          <View style={styles.pickerContainer}>
-            <View style={styles.pickerHeader}>
-              <Text style={styles.pickerTitle}>Choose Workout</Text>
-              <TouchableOpacity 
-                style={styles.closeButton}
-                onPress={() => setShowPicker(false)}
-              >
-                <Text style={styles.closeButtonText}>✕</Text>
-              </TouchableOpacity>
-            </View>
-            <Picker
-              selectedValue={selectedWorkout}
-              onValueChange={(itemValue) => {
-                if (itemValue) {
-                  setSelectedWorkout(itemValue);
+      </Surface>
+
+      <Portal>
+        <Modal
+          visible={showPicker}
+          onDismiss={() => setShowPicker(false)}
+          contentContainerStyle={[styles.pickerModal, { backgroundColor: c.surface }]}
+        >
+          <Text style={[styles.pickerTitle, { color: c.textPrimary }]}>Choose Workout</Text>
+          <FlatList
+            data={workoutTypes}
+            keyExtractor={(item) => item.id.toString()}
+            style={workoutTypes.length > 5 ? styles.pickerList : undefined}
+            scrollEnabled={workoutTypes.length > 5}
+            renderItem={({ item }) => (
+              <TouchableRipple
+                onPress={() => {
+                  setSelectedWorkout(item.name);
                   setShowPicker(false);
-                }
-              }}
-              style={styles.picker}
-              enabled={!saving}
-            >
-              <Picker.Item label="Select a workout..." value="" />
-              {workoutTypes.map((workout) => (
-                <Picker.Item 
-                  key={workout.id} 
-                  label={workout.name} 
-                  value={workout.name}
-                />
-              ))}
-            </Picker>
-          </View>
-        </View>
-      )}
-    </Animated.View>
+                }}
+                rippleColor={c.primary + '20'}
+              >
+                <View style={[styles.pickerItem, { borderBottomColor: c.border }]}>
+                  <MaterialCommunityIcons name="dumbbell" size={20} color={c.primary} />
+                  <Text style={[styles.pickerItemText, { color: c.textPrimary }]}>{item.name}</Text>
+                </View>
+              </TouchableRipple>
+            )}
+            ListEmptyComponent={
+              <View style={styles.pickerEmpty}>
+                <Text style={[styles.pickerEmptyText, { color: c.textTertiary }]}>
+                  No workout types added yet. Use the input above to add some!
+                </Text>
+              </View>
+            }
+          />
+          <Button
+            mode="text"
+            onPress={() => setShowPicker(false)}
+            style={styles.pickerCloseButton}
+          >
+            Close
+          </Button>
+        </Modal>
+      </Portal>
+    </KeyboardAvoidingView>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    position: 'absolute',
-    bottom: 20,
-    left: 0,
-    right: 0,
-    paddingHorizontal: 16,
+    flex: 1,
+    paddingHorizontal: 12,
+    paddingBottom: 8,
   },
   journalContainer: {
-    width: '100%',
-    backgroundColor: 'white',
-    borderRadius: 10,
+    flex: 1,
+    borderRadius: 16,
     padding: 16,
     paddingBottom: 0,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-    maxHeight: height * 0.4,
   },
   headerText: {
-    fontSize: 16,
+    fontSize: 22,
     fontWeight: '700',
-    color: '#2c3e50',
     marginBottom: 8,
     textAlign: 'center',
+    letterSpacing: -0.3,
   },
   scrollableContent: {
-    flexGrow: 0,
-    height: height * 0.35,
+    flex: 1,
   },
   scrollContentContainer: {
-    paddingBottom: 20,
+    paddingBottom: 24,
   },
   addWorkoutContainer: {
-    marginTop: 10,
+    marginTop: 8,
   },
   sectionTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '600',
-    color: '#34495e',
-    marginBottom: 10,
+    marginBottom: 12,
   },
   workoutSelectorButton: {
-    backgroundColor: '#f9f9f9',
     borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 12,
+    borderRadius: 12,
+    padding: 16,
     marginBottom: 16,
+    borderStyle: 'dashed',
+  },
+  selectorContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
   },
   workoutSelectorText: {
-    color: '#777',
     fontSize: 16,
   },
   selectedWorkoutContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#e8f7f0',
-    borderWidth: 1,
-    borderColor: '#2ecc71',
-    borderRadius: 8,
+    borderRadius: 12,
     padding: 12,
     marginBottom: 16,
+  },
+  selectedWorkoutRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
   },
   selectedWorkoutText: {
     fontSize: 16,
-    fontWeight: '500',
-    color: '#2c3e50',
-  },
-  clearWorkoutButton: {
-    backgroundColor: '#3498db',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 4,
-  },
-  clearWorkoutButtonText: {
-    color: 'white',
-    fontSize: 12,
     fontWeight: '600',
   },
+  changeButtonLabel: {
+    fontSize: 12,
+  },
   setRow: {
-    marginBottom: 12,
+    marginBottom: 16,
+    borderLeftWidth: 3,
+    paddingLeft: 12,
+  },
+  setHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   setNumber: {
     fontSize: 14,
-    fontWeight: '500',
-    marginBottom: 4,
-    color: '#34495e',
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  removeSetButton: {
+    margin: 0,
   },
   inputGroup: {
     flexDirection: 'row',
-    alignItems: 'center',
+    gap: 8,
+  },
+  inputWrapper: {
+    flex: 1,
+  },
+  inputLabel: {
+    fontSize: 12,
+    fontWeight: '500',
+    marginBottom: 4,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   input: {
-    flex: 1,
-    height: 40,
+    height: 44,
     borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
+    borderRadius: 10,
     paddingHorizontal: 12,
-    marginRight: 8,
-    backgroundColor: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
   },
-  setButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
+  restTimerContainer: {
+    marginTop: 8,
+    flexDirection: 'row',
     alignItems: 'center',
   },
-  removeButton: {
-    backgroundColor: '#e74c3c',
-  },
-  setButtonText: {
-    color: 'white',
-    fontSize: 20,
-    fontWeight: 'bold',
+  restTimerLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginRight: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   addSetButton: {
-    backgroundColor: '#3498db',
-    padding: 8,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  addSetButtonText: {
-    color: 'white',
-    fontWeight: '600',
+    borderRadius: 10,
+    marginBottom: 12,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
   },
   saveButton: {
-    backgroundColor: '#2ecc71',
-    padding: 12,
-    borderRadius: 8,
-    alignItems: 'center',
+    borderRadius: 12,
+    paddingVertical: 4,
   },
-  savingButton: {
-    backgroundColor: '#95a5a6',
-  },
-  saveButtonText: {
-    color: 'white',
-    fontWeight: '600',
+  saveButtonLabel: {
     fontSize: 16,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  cancelButton: {
+    marginTop: 8,
+    borderRadius: 10,
   },
   savedWorkoutsContainer: {
-    marginTop: 20,
+    marginTop: 24,
+  },
+  sectionTitleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  legendChip: {
+    height: 32,
+  },
+  legendChipText: {
+    fontSize: 12,
+  },
+  legendContainer: {
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+  },
+  legendRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+    gap: 8,
+  },
+  legendLabel: {
+    fontSize: 13,
   },
   savedWorkoutCard: {
-    backgroundColor: '#f5f6fa',
-    borderRadius: 8,
+    borderRadius: 12,
     padding: 12,
     marginBottom: 10,
   },
@@ -730,131 +828,102 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 4,
+  },
+  workoutNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: 8,
   },
   savedWorkoutName: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#2c3e50',
+    fontWeight: '700',
   },
-  deleteButton: {
-    backgroundColor: '#e74c3c',
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: 4,
+  prStarsContainer: {
+    flexDirection: 'row',
   },
-  deleteButtonText: {
-    color: 'white',
-    fontSize: 12,
-    fontWeight: '600',
+  prStar: {
+    marginRight: 2,
   },
-  setsTable: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 4,
+  headerButtons: {
+    flexDirection: 'row',
+    flexShrink: 0,
+  },
+  cardActionButton: {
+    margin: 0,
+  },
+  dataTable: {
+    borderRadius: 8,
     overflow: 'hidden',
   },
-  setsTableHeader: {
-    flexDirection: 'row',
-    backgroundColor: '#ecf0f1',
-    paddingVertical: 8,
+  dataTableHeader: {
+    borderRadius: 8,
+    minHeight: 36,
   },
-  setsTableRow: {
-    flexDirection: 'row',
-    borderTopWidth: 1,
-    borderTopColor: '#ddd',
+  dataTableRow: {
+    minHeight: 36,
   },
-  setsTableCell: {
-    paddingVertical: 8,
-    paddingHorizontal: 4,
-    textAlign: 'center',
-  },
-  setNumberCell: {
-    flex: 1,
-  },
-  weightCell: {
-    flex: 2,
-  },
-  repsCell: {
-    flex: 2,
-  },
-  restTimeCell: {
-    flex: 2, 
-  },
-  pickerOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 2000,
-  },
-  pickerContainer: {
-    width: '90%',
-    backgroundColor: 'white',
-    borderRadius: 10,
-    overflow: 'hidden',
-    elevation: 5,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-  },
-  pickerHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-    backgroundColor: '#f8f9fa',
-  },
-  pickerTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#2c3e50',
-  },
-  closeButton: {
-    padding: 5,
-  },
-  closeButtonText: {
-    fontSize: 16,
-    color: '#e74c3c',
-    fontWeight: 'bold',
-  },
-  picker: {
-    height: 200,
-  },
-  editButton: {
-    backgroundColor: '#3498db',
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: 4,
-    marginRight: 8,
-  },
-  editButtonText: {
-    color: 'white',
+  tableHeaderText: {
     fontSize: 12,
     fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
-  cancelButton: {
-    backgroundColor: '#95a5a6',
-    marginTop: 8,
-  },
-  // New styles for rest timer
-  restTimerContainer: {
-    marginTop: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  restTimerLabel: {
+  tableCellText: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#34495e',
-    marginRight: 8,
+  },
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 40,
+    gap: 8,
+  },
+  emptyStateTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  emptyStateSubtitle: {
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  pickerModal: {
+    margin: 20,
+    borderRadius: 16,
+    padding: 20,
+  },
+  pickerTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  pickerList: {
+    maxHeight: 245,
+  },
+  pickerItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    gap: 12,
+  },
+  pickerItemText: {
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  pickerEmpty: {
+    paddingVertical: 40,
+    alignItems: 'center',
+  },
+  pickerEmptyText: {
+    fontSize: 14,
+    textAlign: 'center',
+    paddingHorizontal: 20,
+  },
+  pickerCloseButton: {
+    marginTop: 12,
   },
 });
 

@@ -1,15 +1,18 @@
-import { useState, useRef } from 'react';
-import { View, StyleSheet, TouchableOpacity, Text, FlatList, Dimensions } from 'react-native';
+import { useState } from 'react';
+import { View, StyleSheet, Text, TouchableOpacity } from 'react-native';
+import { Surface, IconButton, Button } from 'react-native-paper';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import moment from 'moment';
-
-const { width } = Dimensions.get('window');
-const DAY_WIDTH = (width - 60) / 7;
+import { useAppTheme } from '../context/themecontext';
+import DataManagementModal from './data-management-modal';
 
 const WeeklyCalendar = ({ onDateSelect }) => {
   const [selectedDate, setSelectedDate] = useState(moment());
   const [isDatePickerVisible, setDatePickerVisible] = useState(false);
-  const flatListRef = useRef(null);
+  const [dataModalVisible, setDataModalVisible] = useState(false);
+  const { theme, isDark, toggleTheme } = useAppTheme();
+  const c = theme.custom.colors;
 
   const generateWeekDays = (date) => {
     const start = moment(date).startOf('week');
@@ -32,191 +35,182 @@ const WeeklyCalendar = ({ onDateSelect }) => {
     handleDateSelection(newDate);
   };
 
-  const showDatePicker = () => {
-    setDatePickerVisible(true);
-  };
-
-  const hideDatePicker = () => {
-    setDatePickerVisible(false);
-  };
+  const showDatePicker = () => setDatePickerVisible(true);
+  const hideDatePicker = () => setDatePickerVisible(false);
 
   const handleConfirm = (date) => {
     handleDateSelection(moment(date));
     hideDatePicker();
   };
 
-  const renderDay = ({ item }) => {
+  const isToday = (date) => date.isSame(moment(), 'day');
+
+  const renderDay = (item) => {
     const isSelected = item.isSame(selectedDate, 'day');
-    
+    const today = isToday(item);
+
     return (
       <TouchableOpacity
-        style={[styles.dayContainer, isSelected && styles.selectedDayContainer]}
+        key={item.format('YYYY-MM-DD')}
+        style={styles.dayWrapper}
         onPress={() => handleDateSelection(moment(item))}
+        activeOpacity={0.7}
       >
-        <Text style={[styles.dayName, isSelected && styles.selectedText]}>
-          {item.format('ddd')}
-        </Text>
-        <Text style={[styles.dayNumber, isSelected && styles.selectedText]}>
-          {item.format('D')}
-        </Text>
+        <View style={[
+          styles.dayContainer,
+          isSelected && { backgroundColor: c.primary, borderRadius: 12 },
+        ]}>
+          <Text style={[
+            styles.dayName,
+            { color: isSelected ? '#FFFFFF' : c.textTertiary },
+          ]}>
+            {item.format('dd')}
+          </Text>
+          <Text style={[
+            styles.dayNumber,
+            { color: isSelected ? '#FFFFFF' : c.textPrimary },
+            isSelected && { fontWeight: '700' },
+          ]}>
+            {item.format('D')}
+          </Text>
+          {today && !isSelected && (
+            <View style={[styles.todayDot, { backgroundColor: c.primary }]} />
+          )}
+        </View>
       </TouchableOpacity>
     );
   };
 
   return (
-    <View style={styles.parentContainer}>
-      <View style={styles.topSpace} />
-      <View style={styles.container}>
-        <TouchableOpacity 
+    <Surface style={[styles.container, { backgroundColor: c.surface }]} elevation={2}>
+      <View style={styles.topRow}>
+        <Button
+          mode="contained-tonal"
           onPress={showDatePicker}
+          compact
+          labelStyle={styles.jumpLabel}
           style={styles.jumpButton}
+          icon="calendar-search"
         >
-          <Text style={styles.jumpButtonText}>Jump to Date</Text>
+          Jump to Date
+        </Button>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <IconButton
+            icon="cog-outline"
+            size={20}
+            onPress={() => setDataModalVisible(true)}
+            iconColor={c.textSecondary}
+          />
+          <IconButton
+            icon={isDark ? 'weather-sunny' : 'weather-night'}
+            size={20}
+            onPress={toggleTheme}
+            iconColor={c.textSecondary}
+          />
+        </View>
+      </View>
+
+      <Text style={[styles.headerText, { color: c.textPrimary }]}>
+        {selectedDate.format('MMMM YYYY')}
+      </Text>
+
+      <View style={styles.calendarContainer}>
+        <TouchableOpacity onPress={() => handleWeekChange(-1)} style={styles.arrowButton}>
+          <MaterialCommunityIcons name="chevron-left" size={24} color={c.primary} />
         </TouchableOpacity>
 
-        <View style={styles.customHeader}>
-          <Text style={styles.headerText}>
-            {selectedDate.format('MMMM YYYY')}
-          </Text>
+        <View style={styles.weekContainer}>
+          {generateWeekDays(selectedDate).map(day => renderDay(day))}
         </View>
 
-        <View style={styles.calendarContainer}>
-          <TouchableOpacity 
-            style={styles.arrowButton} 
-            onPress={() => handleWeekChange(-1)}
-          >
-            <Text style={styles.arrowText}>{'<'}</Text>
-          </TouchableOpacity>
-
-          <FlatList
-            ref={flatListRef}
-            data={generateWeekDays(selectedDate)}
-            renderItem={renderDay}
-            keyExtractor={(item) => item.format('YYYY-MM-DD')}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            scrollEnabled={true}
-            pagingEnabled={true}
-            onMomentumScrollEnd={(event) => {
-              const contentOffset = event.nativeEvent.contentOffset.x;
-              if (contentOffset > 0) {
-                handleWeekChange(1);
-              } else if (contentOffset < 0) {
-                handleWeekChange(-1);
-              }
-              flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
-            }}
-            contentContainerStyle={styles.weekContainer}
-          />
-
-          <TouchableOpacity 
-            style={styles.arrowButton} 
-            onPress={() => handleWeekChange(1)}
-          >
-            <Text style={styles.arrowText}>{'>'}</Text>
-          </TouchableOpacity>
-        </View>
-
-        <DateTimePickerModal
-          isVisible={isDatePickerVisible}
-          mode="date"
-          onConfirm={handleConfirm}
-          onCancel={hideDatePicker}
-          date={selectedDate.toDate()}
-        />
+        <TouchableOpacity onPress={() => handleWeekChange(1)} style={styles.arrowButton}>
+          <MaterialCommunityIcons name="chevron-right" size={24} color={c.primary} />
+        </TouchableOpacity>
       </View>
-    </View>
+
+      <DateTimePickerModal
+        isVisible={isDatePickerVisible}
+        mode="date"
+        onConfirm={handleConfirm}
+        onCancel={hideDatePicker}
+        date={selectedDate.toDate()}
+      />
+
+      <DataManagementModal
+        visible={dataModalVisible}
+        onDismiss={() => setDataModalVisible(false)}
+      />
+    </Surface>
   );
 };
 
 const styles = StyleSheet.create({
-  parentContainer: {
-    position: 'absolute',
-    top: 50,
-    left: 0,
-    right: 0,
-    zIndex: 10,
-  },
-  topSpace: {
-    flex: 0.3,
-  },
   container: {
-    backgroundColor: 'white',
+    marginHorizontal: 12,
+    marginTop: 4,
+    marginBottom: 8,
+    borderRadius: 16,
     paddingTop: 8,
-    borderRadius: 12,
-    margin: 8,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    paddingBottom: 4,
   },
-  calendarContainer: {
-    height: 55,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  weekContainer: {
+  topRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-  },
-  jumpButton: {
-    backgroundColor: '#3498db',
-    padding: 6,
-    borderRadius: 6,
-    marginHorizontal: 16,
-    marginBottom: 4,
-    alignItems: 'center'
-  },
-  jumpButtonText: {
-    color: 'white',
-    fontSize: 12,
-    fontWeight: '600'
-  },
-  customHeader: {
     alignItems: 'center',
-    marginBottom: 4,
-  },
-  headerText: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#2c3e50',
-  },
-  dayContainer: {
-    width: DAY_WIDTH,
-    height: 45,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 4,
-  },
-  selectedDayContainer: {
-    backgroundColor: '#2ecc71',
-    borderRadius: 6,
-  },
-  dayName: {
-    fontSize: 10,
-    color: '#7f8c8d',
+    paddingHorizontal: 8,
     marginBottom: 2,
   },
-  dayNumber: {
-    fontSize: 12,
-    color: '#7f8c8d',
+  jumpButton: {
+    borderRadius: 8,
   },
-  selectedText: {
-    color: 'white',
+  jumpLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  headerText: {
+    fontSize: 16,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  calendarContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingBottom: 8,
+  },
+  weekContainer: {
+    flex: 1,
+    flexDirection: 'row',
+  },
+  dayWrapper: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  dayContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 40,
+    paddingVertical: 8,
+  },
+  dayName: {
+    fontSize: 11,
+    fontWeight: '600',
+    marginBottom: 6,
+  },
+  dayNumber: {
+    fontSize: 18,
     fontWeight: '500',
+  },
+  todayDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    marginTop: 4,
   },
   arrowButton: {
     padding: 6,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  arrowText: {
-    fontSize: 16,
-    color: '#3498db',
   },
 });
 
