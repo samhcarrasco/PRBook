@@ -14,9 +14,9 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.PromethusGymJournal.app",
-      "buildNumber": "1",
-      "deploymentTarget": "1.0",
+      "bundleIdentifier": "com.samhcarrasco.PRBook",
+      "buildNumber": "2",
+      "deploymentTarget": "15.0",
       "infoPlist": {
         "CFBundleDisplayName": "Prometheus: Gym Journal"
       },
