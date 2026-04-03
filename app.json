@@ -14,8 +14,8 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.OpenHandJournal.app",
-      "buildNumber": "1",
+      "bundleIdentifier": "com.samhcarrasco.PRBook",
+      "buildNumber": "2",
       "deploymentTarget": "15.0",
       "infoPlist": {
         "CFBundleDisplayName": "OpenHand: Gym Journal",
