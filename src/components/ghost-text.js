@@ -5,12 +5,14 @@ import { useAppTheme } from '../context/themecontext';
 const GhostTextInput = ({
   value,
   onChangeText,
+  onFocus,
   suggestions,
   style,
   placeholder,
   ...props
 }) => {
   const [ghostText, setGhostText] = useState('');
+  const [isFocused, setIsFocused] = useState(false);
   const { theme } = useAppTheme();
   const c = theme.custom.colors;
 
@@ -65,26 +67,33 @@ const GhostTextInput = ({
         onChangeText={handleChangeText}
         placeholder={placeholder}
         placeholderTextColor={c.textTertiary}
+        onFocus={(e) => {
+          setIsFocused(true);
+          if (onFocus) onFocus(e);
+        }}
+        onBlur={() => setIsFocused(false)}
         {...props}
       />
 
-      <View style={[
-        styles.textOverlay,
-        { backgroundColor: c.inputBg },
-        style,
-        { pointerEvents: 'none' },
-      ]}>
-        {!value && !ghostText && placeholder ? (
-          <Text style={[styles.ghostText, { color: c.textTertiary }]}>{placeholder}</Text>
-        ) : (
-          <>
-            <Text style={[styles.inputText, { color: c.textPrimary }]}>{value}</Text>
-            {ghostText && (
-              <Text style={[styles.ghostText, { color: c.textTertiary }]}>{ghostText}</Text>
-            )}
-          </>
-        )}
-      </View>
+      {(value || ghostText || !isFocused) && (
+        <View style={[
+          styles.textOverlay,
+          { backgroundColor: c.inputBg },
+          style,
+          { pointerEvents: 'none' },
+        ]}>
+          {!value && !ghostText && placeholder ? (
+            <Text style={[styles.ghostText, { color: c.textTertiary }]}>{placeholder}</Text>
+          ) : (
+            <>
+              <Text style={[styles.inputText, { color: c.textPrimary }]}>{value}</Text>
+              {ghostText && (
+                <Text style={[styles.ghostText, { color: c.textTertiary }]}>{ghostText}</Text>
+              )}
+            </>
+          )}
+        </View>
+      )}
     </View>
   );
 };
