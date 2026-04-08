@@ -607,7 +607,7 @@ const Journal = ({ date, isActive = true }) => {
           onDismiss={() => setShowPicker(false)}
           contentContainerStyle={[styles.pickerModal, { backgroundColor: c.surface }]}
         >
-          <Text style={[styles.pickerTitle, { color: c.textPrimary }]}>Choose Workout</Text>
+          <Text style={[styles.pickerTitle, { color: c.textPrimary }]}>Choose Excercise</Text>
           <FlatList
             data={workoutTypes}
             keyExtractor={(item) => item.id.toString()}
