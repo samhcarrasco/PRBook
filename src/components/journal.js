@@ -217,7 +217,7 @@ const Journal = ({ date, isActive = true }) => {
     Keyboard.dismiss();
 
     if (!db || !date || !selectedWorkout || sets.length === 0) {
-      Alert.alert('Error', 'Please select a workout and add at least one set');
+      Alert.alert('Error', 'Please select an exercise and add at least one set');
       return;
     }
 
@@ -456,7 +456,7 @@ const Journal = ({ date, isActive = true }) => {
             >
               <View style={styles.selectorContent}>
                 <MaterialCommunityIcons name="dumbbell" size={20} color={c.textTertiary} />
-                <Text style={[styles.workoutSelectorText, { color: c.textTertiary }]}>Select a workout...</Text>
+                <Text style={[styles.workoutSelectorText, { color: c.textTertiary }]}>Select an exercise...</Text>
               </View>
             </TouchableRipple>
           ) : (
@@ -561,7 +561,7 @@ const Journal = ({ date, isActive = true }) => {
             <MaterialCommunityIcons name="weight-lifter" size={48} color={c.textTertiary} />
             <Text style={[styles.emptyStateTitle, { color: c.textSecondary }]}>No workouts yet</Text>
             <Text style={[styles.emptyStateSubtitle, { color: c.textTertiary }]}>
-              Select a workout above to start logging
+              Select an exercise above to start logging
             </Text>
           </View>
         )}
