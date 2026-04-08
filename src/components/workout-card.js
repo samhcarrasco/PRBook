@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { View, StyleSheet, Alert } from 'react-native';
 import { Surface, IconButton } from 'react-native-paper';
 import GhostTextInput from './ghost-text';
@@ -7,6 +7,7 @@ import { useWorkout } from '../context/workoutcontext';
 import { useAppTheme } from '../context/themecontext';
 
 const WorkoutCard = ({ date }) => {
+  const inputRef = useRef(null);
   const [db, setDb] = useState(null);
   const [workoutName, setWorkoutName] = useState('');
   const [suggestions, setSuggestions] = useState([]);
@@ -65,6 +66,7 @@ const WorkoutCard = ({ date }) => {
       setSuggestions(allWorkouts);
       refreshWorkoutList();
       setWorkoutName('');
+      inputRef.current?.focus();
     } catch (error) {
       if (error.message.includes('already exists')) {
         alert('This workout already exists!');
@@ -92,6 +94,7 @@ const WorkoutCard = ({ date }) => {
               setSuggestions(allWorkouts);
               refreshWorkoutList();
               setWorkoutName('');
+              inputRef.current?.focus();
             } catch (error) {
               console.error('Error deleting workout:', error);
               Alert.alert('Error', 'Could not delete the workout');
@@ -107,6 +110,7 @@ const WorkoutCard = ({ date }) => {
       <Surface style={[styles.inputButtonWrapper, { backgroundColor: c.surface }]} elevation={2}>
         <View style={styles.inputContainer}>
           <GhostTextInput
+            ref={inputRef}
             style={styles.input}
             value={workoutName}
             onChangeText={handleWorkoutNameChange}

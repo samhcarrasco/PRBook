@@ -12,12 +12,10 @@ import { HISTORY_METRICS } from '../components/history/history-metrics';
 import moment from 'moment';
 
 const TIME_WINDOW_OPTIONS = [
-  { key: '1W', label: '1W' },
-  { key: '2W', label: '2W' },
-  { key: '1M', label: '1M' },
-  { key: '3M', label: '3M' },
-  { key: '6M', label: '6M' },
-  { key: '1Y', label: '1Y' },
+  { key: '1W', label: '1 Week' },
+  { key: '1M', label: '1 Month' },
+  { key: '6M', label: '6 Month' },
+  { key: '1Y', label: '1 Year' },
   { key: 'ALL', label: 'All' },
 ];
 
@@ -41,19 +39,9 @@ const getWindowBounds = (windowKey, histories) => {
         startDate: anchorDate.clone().subtract(6, 'days').startOf('day').format('YYYY-MM-DD'),
         endDate: anchorDate.format('YYYY-MM-DD'),
       };
-    case '2W':
-      return {
-        startDate: anchorDate.clone().subtract(13, 'days').startOf('day').format('YYYY-MM-DD'),
-        endDate: anchorDate.format('YYYY-MM-DD'),
-      };
     case '1M':
       return {
         startDate: anchorDate.clone().subtract(1, 'month').startOf('day').format('YYYY-MM-DD'),
-        endDate: anchorDate.format('YYYY-MM-DD'),
-      };
-    case '3M':
-      return {
-        startDate: anchorDate.clone().subtract(3, 'months').startOf('day').format('YYYY-MM-DD'),
         endDate: anchorDate.format('YYYY-MM-DD'),
       };
     case '6M':
@@ -231,7 +219,6 @@ const HistoryScreen = () => {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.timeWindowContainer}>
-            <Text style={[styles.timeWindowLabel, { color: c.textSecondary }]}>Passed:</Text>
             <View style={styles.timeWindowChips}>
               {TIME_WINDOW_OPTIONS.map((option) => {
                 const isSelected = selectedTimeWindow === option.key;
@@ -366,20 +353,15 @@ const styles = StyleSheet.create({
   },
   timeWindowContainer: {
     marginBottom: 16,
-    gap: 10,
-  },
-  timeWindowLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    paddingLeft: 2,
   },
   timeWindowChips: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     gap: 8,
   },
   timeWindowChip: {
+    flex: 1,
     height: 34,
+    alignItems: 'center',
   },
   timeWindowChipText: {
     fontSize: 12,

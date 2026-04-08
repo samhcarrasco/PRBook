@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { View, StyleSheet, Text, TouchableOpacity } from 'react-native';
+import { useCallback, useRef, useState } from 'react';
+import { View, StyleSheet, Text, TouchableOpacity, PanResponder, Animated } from 'react-native';
 import { Surface, IconButton, Button } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
@@ -7,12 +7,19 @@ import moment from 'moment';
 import { useAppTheme } from '../context/themecontext';
 import DataManagementModal from './data-management-modal';
 
+const SWIPE_THRESHOLD = 50;
+const SLIDE_DURATION = 200;
+
 const WeeklyCalendar = ({ onDateSelect }) => {
   const [selectedDate, setSelectedDate] = useState(moment());
   const [isDatePickerVisible, setDatePickerVisible] = useState(false);
   const [dataModalVisible, setDataModalVisible] = useState(false);
   const { theme, isDark, toggleTheme } = useAppTheme();
   const c = theme.custom.colors;
+
+  const translateX = useRef(new Animated.Value(0)).current;
+  const isSwiping = useRef(false);
+  const containerWidth = useRef(0);
 
   const generateWeekDays = (date) => {
     const start = moment(date).startOf('week');
@@ -23,17 +30,81 @@ const WeeklyCalendar = ({ onDateSelect }) => {
     return days;
   };
 
-  const handleDateSelection = (date) => {
+  const handleDateSelection = useCallback((date) => {
     setSelectedDate(date);
     if (onDateSelect) {
       onDateSelect(date.toDate());
     }
-  };
+  }, [onDateSelect]);
 
-  const handleWeekChange = (direction) => {
-    const newDate = moment(selectedDate).add(direction, 'weeks');
-    handleDateSelection(newDate);
-  };
+  const handleWeekChange = useCallback((direction) => {
+    setSelectedDate((prev) => {
+      const newDate = moment(prev).add(direction, 'weeks');
+      if (onDateSelect) {
+        onDateSelect(newDate.toDate());
+      }
+      return newDate;
+    });
+  }, [onDateSelect]);
+
+  const animateWeekChange = useCallback((direction) => {
+    if (isSwiping.current) return;
+    isSwiping.current = true;
+
+    const width = containerWidth.current || 300;
+
+    // Slide current week off-screen
+    Animated.timing(translateX, {
+      toValue: -direction * width,
+      duration: SLIDE_DURATION,
+      useNativeDriver: true,
+    }).start(() => {
+      // Update the date
+      handleWeekChange(direction);
+
+      // Snap new week to opposite side (off-screen), then slide in
+      translateX.setValue(direction * width);
+      Animated.timing(translateX, {
+        toValue: 0,
+        duration: SLIDE_DURATION,
+        useNativeDriver: true,
+      }).start(() => {
+        isSwiping.current = false;
+      });
+    });
+  }, [handleWeekChange, translateX]);
+
+  const handleArrowPress = useCallback((direction) => {
+    animateWeekChange(direction);
+  }, [animateWeekChange]);
+
+  const weekChangeRef = useRef(animateWeekChange);
+  weekChangeRef.current = animateWeekChange;
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, gestureState) =>
+        Math.abs(gestureState.dx) > 15 && Math.abs(gestureState.dy) < Math.abs(gestureState.dx),
+      onPanResponderMove: (_, gestureState) => {
+        translateX.setValue(gestureState.dx);
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        if (gestureState.dx > SWIPE_THRESHOLD) {
+          weekChangeRef.current(-1);
+        } else if (gestureState.dx < -SWIPE_THRESHOLD) {
+          weekChangeRef.current(1);
+        } else {
+          // Snap back
+          Animated.spring(translateX, {
+            toValue: 0,
+            useNativeDriver: true,
+            tension: 120,
+            friction: 8,
+          }).start();
+        }
+      },
+    })
+  ).current;
 
   const showDatePicker = () => setDatePickerVisible(true);
   const hideDatePicker = () => setDatePickerVisible(false);
@@ -115,15 +186,21 @@ const WeeklyCalendar = ({ onDateSelect }) => {
       </Text>
 
       <View style={styles.calendarContainer}>
-        <TouchableOpacity onPress={() => handleWeekChange(-1)} style={styles.arrowButton}>
+        <TouchableOpacity onPress={() => handleArrowPress(-1)} style={styles.arrowButton}>
           <MaterialCommunityIcons name="chevron-left" size={24} color={c.primary} />
         </TouchableOpacity>
 
-        <View style={styles.weekContainer}>
-          {generateWeekDays(selectedDate).map(day => renderDay(day))}
+        <View
+          style={styles.weekClip}
+          onLayout={(e) => { containerWidth.current = e.nativeEvent.layout.width; }}
+          {...panResponder.panHandlers}
+        >
+          <Animated.View style={[styles.weekContainer, { transform: [{ translateX }] }]}>
+            {generateWeekDays(selectedDate).map(day => renderDay(day))}
+          </Animated.View>
         </View>
 
-        <TouchableOpacity onPress={() => handleWeekChange(1)} style={styles.arrowButton}>
+        <TouchableOpacity onPress={() => handleArrowPress(1)} style={styles.arrowButton}>
           <MaterialCommunityIcons name="chevron-right" size={24} color={c.primary} />
         </TouchableOpacity>
       </View>
@@ -178,8 +255,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingBottom: 8,
   },
-  weekContainer: {
+  weekClip: {
     flex: 1,
+    overflow: 'hidden',
+  },
+  weekContainer: {
     flexDirection: 'row',
   },
   dayWrapper: {

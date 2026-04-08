@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { forwardRef, useState } from 'react';
 import { View, Text, TextInput, StyleSheet } from 'react-native';
 import { useAppTheme } from '../context/themecontext';
 
-const GhostTextInput = ({
+const GhostTextInput = forwardRef(({
   value,
   onChangeText,
   onFocus,
@@ -10,7 +10,7 @@ const GhostTextInput = ({
   style,
   placeholder,
   ...props
-}) => {
+}, ref) => {
   const [ghostText, setGhostText] = useState('');
   const [isFocused, setIsFocused] = useState(false);
   const { theme } = useAppTheme();
@@ -54,6 +54,7 @@ const GhostTextInput = ({
   return (
     <View style={styles.container}>
       <TextInput
+        ref={ref}
         style={[
           styles.input,
           {
@@ -96,7 +97,7 @@ const GhostTextInput = ({
       )}
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create({
   container: {
