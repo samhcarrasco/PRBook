@@ -7,15 +7,12 @@ import { openDB, historyOperations, prOperations } from '../db/db';
 import { useWorkout } from '../context/workoutcontext';
 import ExercisePicker from '../components/history/exercise-picker';
 import MetricChart from '../components/history/metric-chart';
-import WorkoutDetailModal from '../components/history/workout-detail-modal';
 import { HISTORY_METRICS } from '../components/history/history-metrics';
 import moment from 'moment';
 
 const TIME_WINDOW_OPTIONS = [
   { key: '1W', label: '1W' },
-  { key: '2W', label: '2W' },
   { key: '1M', label: '1M' },
-  { key: '3M', label: '3M' },
   { key: '6M', label: '6M' },
   { key: '1Y', label: '1Y' },
   { key: 'ALL', label: 'All' },
@@ -41,19 +38,9 @@ const getWindowBounds = (windowKey, histories) => {
         startDate: anchorDate.clone().subtract(6, 'days').startOf('day').format('YYYY-MM-DD'),
         endDate: anchorDate.format('YYYY-MM-DD'),
       };
-    case '2W':
-      return {
-        startDate: anchorDate.clone().subtract(13, 'days').startOf('day').format('YYYY-MM-DD'),
-        endDate: anchorDate.format('YYYY-MM-DD'),
-      };
     case '1M':
       return {
         startDate: anchorDate.clone().subtract(1, 'month').startOf('day').format('YYYY-MM-DD'),
-        endDate: anchorDate.format('YYYY-MM-DD'),
-      };
-    case '3M':
-      return {
-        startDate: anchorDate.clone().subtract(3, 'months').startOf('day').format('YYYY-MM-DD'),
         endDate: anchorDate.format('YYYY-MM-DD'),
       };
     case '6M':
@@ -87,8 +74,6 @@ const HistoryScreen = () => {
   const [selectedExercises, setSelectedExercises] = useState([]);
   const [exerciseHistories, setExerciseHistories] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [detailModalVisible, setDetailModalVisible] = useState(false);
-  const [detailData, setDetailData] = useState(null);
 
   const loadHistory = useCallback(async () => {
     if (selectedExercises.length === 0) {
@@ -200,80 +185,59 @@ const HistoryScreen = () => {
     [windowedHistories]
   );
 
-  const handleDatePress = (date) => {
-    const workoutsForDate = windowedHistories.flatMap((history) =>
-      history.sessions
-        .filter((session) => session.date === date)
-        .map((session) => ({
-          ...session,
-          exerciseId: history.exercise.id,
-          exerciseName: history.exercise.name,
-        }))
-    );
-
-    if (workoutsForDate.length === 0) return;
-
-    setDetailData({
-      date,
-      workouts: workoutsForDate,
-    });
-    setDetailModalVisible(true);
-  };
-
   return (
     <View style={[styles.container, { backgroundColor: c.background }]}>
       <Surface style={[styles.content, { backgroundColor: c.surface }]} elevation={2}>
         <Text style={[styles.headerText, { color: c.textPrimary }]}>Workout History</Text>
+
+        <View style={styles.timeWindowContainer}>
+          <View style={styles.timeWindowChips}>
+            {TIME_WINDOW_OPTIONS.map((option) => {
+              const isSelected = selectedTimeWindow === option.key;
+
+              return (
+                <Chip
+                  key={option.key}
+                  compact
+                  selected={false}
+                  onPress={() => setSelectedTimeWindow(option.key)}
+                  mode={isSelected ? 'flat' : 'outlined'}
+                  style={[
+                    styles.timeWindowChip,
+                    isSelected
+                      ? { backgroundColor: c.primary }
+                      : { borderColor: c.borderLight, backgroundColor: c.surfaceVariant },
+                  ]}
+                  textStyle={[
+                    styles.timeWindowChipText,
+                    { color: isSelected ? '#FFFFFF' : c.textSecondary },
+                  ]}
+                  showSelectedOverlay={false}
+                >
+                  {option.label}
+                </Chip>
+              );
+            })}
+          </View>
+        </View>
+
+        <ExercisePicker
+          selectedExercises={selectedExercises}
+          onChange={setSelectedExercises}
+          historyVersion={workoutHistoryVersion}
+        />
+
+        {selectedExercises.length > 0 && (
+          <Text style={[styles.selectionHint, { color: c.textTertiary }]}>
+            Comparing {selectedCountLabel}
+          </Text>
+        )}
 
         <ScrollView
           style={styles.scrollable}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          <View style={styles.timeWindowContainer}>
-            <Text style={[styles.timeWindowLabel, { color: c.textSecondary }]}>Passed:</Text>
-            <View style={styles.timeWindowChips}>
-              {TIME_WINDOW_OPTIONS.map((option) => {
-                const isSelected = selectedTimeWindow === option.key;
-
-                return (
-                  <Chip
-                    key={option.key}
-                    compact
-                    selected={isSelected}
-                    onPress={() => setSelectedTimeWindow(option.key)}
-                    mode={isSelected ? 'flat' : 'outlined'}
-                    style={[
-                      styles.timeWindowChip,
-                      isSelected
-                        ? { backgroundColor: c.primary }
-                        : { borderColor: c.borderLight, backgroundColor: c.surfaceVariant },
-                    ]}
-                    textStyle={[
-                      styles.timeWindowChipText,
-                      { color: isSelected ? '#FFFFFF' : c.textSecondary },
-                    ]}
-                    showSelectedOverlay={false}
-                  >
-                    {option.label}
-                  </Chip>
-                );
-              })}
-            </View>
-          </View>
-
-          <ExercisePicker
-            selectedExercises={selectedExercises}
-            onChange={setSelectedExercises}
-            historyVersion={workoutHistoryVersion}
-          />
-
-          {selectedExercises.length > 0 && (
-            <Text style={[styles.selectionHint, { color: c.textTertiary }]}>
-              Comparing {selectedCountLabel}
-            </Text>
-          )}
-
           {!loading && selectedExercises.length > 0 && !hasWindowData && exerciseHistories.length > 0 && (
             <Text style={[styles.windowHint, { color: c.textTertiary }]}>
               No workouts in this window yet. The graphs below are still scaled to the selected date frame.
@@ -301,7 +265,6 @@ const HistoryScreen = () => {
               <MetricChart
                 histories={windowedHistories}
                 metric={metric}
-                onDatePress={handleDatePress}
                 timelineBounds={windowBounds}
               />
             </Surface>
@@ -328,12 +291,6 @@ const HistoryScreen = () => {
           )}
         </ScrollView>
       </Surface>
-
-      <WorkoutDetailModal
-        visible={detailModalVisible}
-        onDismiss={() => setDetailModalVisible(false)}
-        data={detailData}
-      />
     </View>
   );
 };
@@ -366,20 +323,15 @@ const styles = StyleSheet.create({
   },
   timeWindowContainer: {
     marginBottom: 16,
-    gap: 10,
-  },
-  timeWindowLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    paddingLeft: 2,
   },
   timeWindowChips: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     gap: 8,
   },
   timeWindowChip: {
+    flex: 1,
     height: 34,
+    alignItems: 'center',
   },
   timeWindowChipText: {
     fontSize: 12,

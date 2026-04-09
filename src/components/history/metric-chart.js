@@ -65,14 +65,22 @@ const getWeekKey = (dateStr) => {
   return `${y}-${m}-${dd}`;
 };
 
-const MetricChart = ({ histories, metric, onDatePress, timelineBounds }) => {
+const MetricChart = ({ histories, metric, timelineBounds }) => {
   const { theme } = useAppTheme();
   const c = theme.custom.colors;
   const [chartFrameWidth, setChartFrameWidth] = useState(0);
+  const [activeTooltipIndex, setActiveTooltipIndex] = useState(null);
 
   const chartConfig = useMemo(() => {
     if (!histories || histories.length === 0 || !timelineBounds) {
-      return { allDates: [], dataSet: [], hasVisibleData: false };
+      return {
+        allDates: [],
+        dataSet: [],
+        hasVisibleData: false,
+        visibleLabelIndexes: new Set(),
+        aggregated: false,
+        aggregationLevel: 'none',
+      };
     }
 
     const palette = buildSeriesPalette(c);
@@ -257,10 +265,6 @@ const MetricChart = ({ histories, metric, onDatePress, timelineBounds }) => {
     };
   }, [c, histories, metric.key, timelineBounds]);
 
-  if (chartConfig.allDates.length === 0) {
-    return null;
-  }
-
   const pointCount = chartConfig.allDates.length;
   const handleChartLayout = useCallback((event) => {
     const nextWidth = Math.max(0, Math.floor(event.nativeEvent.layout.width));
@@ -289,7 +293,7 @@ const MetricChart = ({ histories, metric, onDatePress, timelineBounds }) => {
     };
   }, [chartConfig.visibleLabelIndexes.size, chartFrameWidth, pointCount]);
 
-  const dataSetWithLabels = chartConfig.dataSet.map((series) => ({
+  const dataSetWithLabels = useMemo(() => chartConfig.dataSet.map((series) => ({
     ...series,
     data: series.data.map((point, index) => ({
       ...point,
@@ -316,7 +320,70 @@ const MetricChart = ({ histories, metric, onDatePress, timelineBounds }) => {
         }
         : undefined,
     })),
-  }));
+  })), [chartConfig.dataSet, chartConfig.visibleLabelIndexes, chartFit?.shouldRotateLabels, c.textTertiary]);
+
+  const activeTooltip = useMemo(() => {
+    if (typeof activeTooltipIndex !== 'number' || activeTooltipIndex < 0) {
+      return null;
+    }
+
+    const itemList = chartConfig.dataSet
+      .map((series) => series.data?.[activeTooltipIndex])
+      .filter(Boolean);
+
+    if (itemList.length === 0) {
+      return null;
+    }
+
+    const visibleItems = itemList.filter((item) => !item.isMissing);
+    const displayItems = visibleItems.length > 0 ? visibleItems : itemList;
+    const labelDate = displayItems[0]?.date;
+
+    if (!labelDate) {
+      return null;
+    }
+
+    return {
+      labelDate,
+      visibleItems,
+      sessionCount: displayItems[0]?.sessionCount ?? null,
+    };
+  }, [activeTooltipIndex, chartConfig.dataSet]);
+
+  const handlePointerProps = useCallback(({ pointerIndex, pointerX }) => {
+    if (typeof pointerIndex !== 'number' || pointerIndex < 0) {
+      return;
+    }
+
+    if (typeof pointerX !== 'number' || pointerX <= 0) {
+      return;
+    }
+
+    setActiveTooltipIndex(pointerIndex);
+  }, []);
+
+  const pointerConfig = useMemo(() => ({
+    pointerStripColor: c.textTertiary,
+    pointerStripWidth: 1,
+    pointerColor: c.primary,
+    radius: 6,
+    pointerLabelWidth: 0,
+    pointerLabelHeight: 0,
+    activatePointersOnLongPress: false,
+    autoAdjustPointerLabelPosition: false,
+    pointerLabelComponent: () => null,
+    pointerEvents: 'none',
+    persistPointer: false,
+    pointerVanishDelay: 0,
+    resetPointerOnDataChange: false,
+  }), [
+    c.primary,
+    c.textTertiary,
+  ]);
+
+  if (chartConfig.allDates.length === 0) {
+    return null;
+  }
 
   const aggregationHint = chartConfig.aggregated
     ? `Showing ${chartConfig.aggregationLevel === 'month' ? 'monthly' : 'weekly'} averages.`
@@ -339,10 +406,35 @@ const MetricChart = ({ histories, metric, onDatePress, timelineBounds }) => {
         })}
       </View>
 
+      <View style={styles.tooltipHeader}>
+        {activeTooltip ? (
+          <View
+            pointerEvents="none"
+            style={[styles.tooltip, { backgroundColor: c.surface, borderColor: c.border }]}
+          >
+            <Text style={[styles.tooltipDate, { color: c.textSecondary }]}>
+              {formatChartDate(activeTooltip.labelDate)}
+              {chartConfig.aggregated && activeTooltip.sessionCount
+                ? ` (${activeTooltip.sessionCount} sessions avg)`
+                : ''}
+            </Text>
+            {activeTooltip.visibleItems.slice(0, 3).map((item) => (
+              <Text key={`${item.exerciseName}-${item.date}`} style={[styles.tooltipValue, { color: c.textPrimary }]}>
+                {item.exerciseName}: {formatMetricValue(item.value, metric.key, { includeUnit: true })}
+              </Text>
+            ))}
+            {activeTooltip.visibleItems.length === 0 && (
+              <Text style={[styles.tooltipValue, { color: c.textTertiary }]}>No workout on this date</Text>
+            )}
+          </View>
+        ) : null}
+      </View>
+
       <View style={styles.chartFrame} onLayout={handleChartLayout}>
         {chartFit ? (
           <LineChart
             dataSet={dataSetWithLabels}
+            getPointerProps={handlePointerProps}
             parentWidth={chartFrameWidth}
             width={chartFit.plotWidth}
             height={CHART_HEIGHT}
@@ -373,57 +465,15 @@ const MetricChart = ({ histories, metric, onDatePress, timelineBounds }) => {
             backgroundColor="transparent"
             isAnimated
             animationDuration={500}
-            pointerConfig={{
-              pointerStripColor: c.textTertiary,
-              pointerStripWidth: 1,
-              pointerColor: c.primary,
-              radius: 6,
-              pointerLabelWidth: 180,
-              pointerLabelHeight: 64,
-              activatePointersOnLongPress: false,
-              autoAdjustPointerLabelPosition: true,
-              pointerLabelComponent: (items) => {
-                const visibleItems = items.filter((item) => !item.isMissing);
-                const labelDate = visibleItems[0]?.date || items[0]?.date;
-
-                return (
-                  <View style={[styles.tooltip, { backgroundColor: c.surface, borderColor: c.border }]}>
-                    <Text style={[styles.tooltipDate, { color: c.textSecondary }]}>
-                      {labelDate ? formatChartDate(labelDate) : ''}
-                      {chartConfig.aggregated && visibleItems[0]?.sessionCount
-                        ? ` (${visibleItems[0].sessionCount} sessions avg)`
-                        : ''}
-                    </Text>
-                    {visibleItems.slice(0, 3).map((item) => (
-                      <Text key={`${item.exerciseName}-${item.date}`} style={[styles.tooltipValue, { color: c.textPrimary }]}>
-                        {item.exerciseName}: {formatMetricValue(item.value, metric.key, { includeUnit: true })}
-                      </Text>
-                    ))}
-                    {visibleItems.length === 0 && (
-                      <Text style={[styles.tooltipValue, { color: c.textPrimary }]}>No workout in this period</Text>
-                    )}
-                  </View>
-                );
-              },
-              pointerEvents: 'auto',
-              onComplete: (items, index) => {
-                const visibleItems = items.filter((item) => !item.isMissing);
-                if (visibleItems.length === 0) return;
-
-                const selectedDate = visibleItems[0]?.date;
-                if (selectedDate && onDatePress) {
-                  onDatePress(selectedDate);
-                }
-              },
-            }}
+            pointerConfig={pointerConfig}
           />
         ) : null}
       </View>
 
       <Text style={[styles.tapHint, { color: c.textTertiary }]}>
         {aggregationHint
-          ? `${aggregationHint} Tap a point to see details.`
-          : 'Tap a chart point to see the workout and PR stars for that date.'}
+          ? `${aggregationHint} Tap or slide across the chart to preview dates.`
+          : 'Tap or slide across the chart to preview dates and values.'}
       </Text>
     </View>
   );
@@ -452,6 +502,10 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     flexShrink: 1,
   },
+  tooltipHeader: {
+    minHeight: 72,
+    marginBottom: 8,
+  },
   tooltip: {
     paddingHorizontal: 12,
     paddingVertical: 8,
@@ -471,6 +525,7 @@ const styles = StyleSheet.create({
   chartFrame: {
     width: '100%',
     minHeight: CHART_HEIGHT,
+    overflow: 'visible',
   },
   axisLabelWrap: {
     alignItems: 'center',
