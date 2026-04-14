@@ -18,7 +18,7 @@ const WorkoutScreen = ({ isActive = true }) => {
     >
       <WeeklyCalendar onDateSelect={setSelectedDate} />
       <WorkoutCard date={selectedDate} />
-      <View style={{ flex: 1 }}>
+      <View style={{ flex: 1, paddingBottom: 16 }}>
         <Journal date={selectedDate} isActive={isActive} />
       </View>
     </View>

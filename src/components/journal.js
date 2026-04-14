@@ -5,6 +5,7 @@ import {
   TextInput,
   StyleSheet,
   Alert,
+  ScrollView,
   FlatList,
   Keyboard,
   Platform,
@@ -463,7 +464,7 @@ const Journal = ({ date, isActive = true }) => {
             <Surface style={[styles.selectedWorkoutContainer, { backgroundColor: c.successContainer }]} elevation={0}>
               <View style={styles.selectedWorkoutRow}>
                 <MaterialCommunityIcons name="check-circle" size={20} color={c.success} />
-                <Text style={[styles.selectedWorkoutText, { color: c.textPrimary }]}>{selectedWorkout}</Text>
+                <Text style={[styles.selectedWorkoutText, { color: c.textPrimary }]} numberOfLines={1}>{selectedWorkout}</Text>
               </View>
               <Button
                 mode="contained-tonal"
@@ -580,25 +581,24 @@ const Journal = ({ date, isActive = true }) => {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       enabled={isActive}
     >
       <Surface style={[styles.journalContainer, { backgroundColor: c.surface }]} elevation={2}>
         <Text style={[styles.headerText, { color: c.textPrimary }]}>Workout Journal</Text>
 
-        <FlatList
-          data={[{ key: 'journal_content' }]}
-          renderItem={() => renderJournalContent()}
-          keyExtractor={item => item.key}
+        <ScrollView
           style={styles.scrollableContent}
           contentContainerStyle={styles.scrollContentContainer}
           showsVerticalScrollIndicator={false}
-          scrollEventThrottle={16}
           bounces={true}
           overScrollMode="always"
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
-        />
+          automaticallyAdjustKeyboardInsets={true}
+        >
+          {renderJournalContent()}
+        </ScrollView>
       </Surface>
 
       <Portal>
@@ -652,7 +652,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     paddingHorizontal: 12,
-    paddingBottom: 8,
   },
   journalContainer: {
     flex: 1,
@@ -713,6 +712,7 @@ const styles = StyleSheet.create({
   selectedWorkoutText: {
     fontSize: 16,
     fontWeight: '600',
+    flex: 1,
   },
   changeButtonLabel: {
     fontSize: 12,

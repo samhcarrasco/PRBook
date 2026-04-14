@@ -59,7 +59,7 @@ const GhostTextInput = forwardRef(({
           styles.input,
           {
             backgroundColor: c.inputBg,
-            color: c.textPrimary,
+            color: isFocused && value ? 'transparent' : c.textPrimary,
             borderColor: c.border,
           },
           style,
@@ -68,6 +68,7 @@ const GhostTextInput = forwardRef(({
         onChangeText={handleChangeText}
         placeholder={placeholder}
         placeholderTextColor={c.textTertiary}
+        selectionColor={c.textPrimary}
         onFocus={(e) => {
           setIsFocused(true);
           if (onFocus) onFocus(e);
@@ -79,7 +80,7 @@ const GhostTextInput = forwardRef(({
       {(value || ghostText || !isFocused) && (
         <View style={[
           styles.textOverlay,
-          { backgroundColor: c.inputBg },
+          !isFocused && { backgroundColor: c.inputBg },
           style,
           { pointerEvents: 'none' },
         ]}>

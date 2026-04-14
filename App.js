@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { StatusBar } from 'react-native';
 import { PaperProvider, BottomNavigation } from 'react-native-paper';
-import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WorkoutProvider } from './src/context/workoutcontext';
 import { ThemeProvider, useAppTheme } from './src/context/themecontext';
 import { initDatabase } from './src/db/db';
@@ -11,10 +11,11 @@ import HistoryScreen from './src/screens/history-screen';
 function AppContent() {
   const { theme, isDark } = useAppTheme();
   const c = theme.custom.colors;
+  const insets = useSafeAreaInsets();
   const [index, setIndex] = useState(0);
   const [routes] = useState([
     { key: 'workout', title: 'Workout', focusedIcon: 'dumbbell', unfocusedIcon: 'dumbbell' },
-    { key: 'history', title: 'History', focusedIcon: 'chart-line', unfocusedIcon: 'chart-line-variant' },
+    { key: 'history', title: 'History', focusedIcon: 'chart-line', unfocusedIcon: 'chart-line' },
   ]);
 
   useEffect(() => {
@@ -53,7 +54,7 @@ function AppContent() {
           barStyle={{ backgroundColor: c.surface, borderTopWidth: 1, borderTopColor: c.border }}
           activeColor={c.primary}
           inactiveColor={c.textTertiary}
-          safeAreaInsets={{ bottom: 8 }}
+          safeAreaInsets={{ bottom: insets.bottom }}
           theme={theme}
         />
       </SafeAreaView>
