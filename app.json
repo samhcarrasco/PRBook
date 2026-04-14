@@ -2,7 +2,7 @@
   "expo": {
     "name": "PRBook",
     "slug": "PRBook",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -15,7 +15,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.samhcarrasco.PRBook",
-      "buildNumber": "3",
+      "buildNumber": "4",
       "deploymentTarget": "15.0",
       "infoPlist": {
         "CFBundleDisplayName": "OpenHand: Gym Journal",
