@@ -8,6 +8,9 @@
 
 /* Begin PBXBuildFile section */
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
+		FA174800FART00000000001 /* FartSoundManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA174800FART00000000011 /* FartSoundManager.swift */; };
+		FA174800FART00000000002 /* FartSoundModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA174800FART00000000012 /* FartSoundModule.swift */; };
+		FA174800FART00000000003 /* FartSoundModule.m in Sources */ = {isa = PBXBuildFile; fileRef = FA174800FART00000000013 /* FartSoundModule.m */; };
 		3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */; };
 		446A518743E553280AF5A1AB /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 093B06E446ECAC9FBEA195EF /* ExpoModulesProvider.swift */; };
 		A9E44974DE96439E90290920 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 0FA0F4349F3443488B3A0C91 /* PrivacyInfo.xcprivacy */; };
@@ -18,6 +21,9 @@
 
 /* Begin PBXFileReference section */
 		093B06E446ECAC9FBEA195EF /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-PRBook/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
+		FA174800FART00000000011 /* FartSoundManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = FartSoundManager.swift; path = PRBook/FartSoundManager.swift; sourceTree = "<group>"; };
+		FA174800FART00000000012 /* FartSoundModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = FartSoundModule.swift; path = PRBook/FartSoundModule.swift; sourceTree = "<group>"; };
+		FA174800FART00000000013 /* FartSoundModule.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = FartSoundModule.m; path = PRBook/FartSoundModule.m; sourceTree = "<group>"; };
 		0FA0F4349F3443488B3A0C91 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = PrivacyInfo.xcprivacy; path = PRBook/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		13B07F961A680F5B00A75B9A /* PRBook.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PRBook.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = PRBook/Images.xcassets; sourceTree = "<group>"; };
@@ -49,6 +55,9 @@
 			children = (
 				F11748412D0307B40044C1D9 /* AppDelegate.swift */,
 				F11748442D0722820044C1D9 /* PRBook-Bridging-Header.h */,
+				FA174800FART00000000011 /* FartSoundManager.swift */,
+				FA174800FART00000000012 /* FartSoundModule.swift */,
+				FA174800FART00000000013 /* FartSoundModule.m */,
 				BB2F792B24A3F905000567C9 /* Supporting */,
 				13B07FB51A68108700A75B9A /* Images.xcassets */,
 				13B07FB61A68108700A75B9A /* Info.plist */,
@@ -327,6 +336,9 @@
 			files = (
 				F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */,
 				446A518743E553280AF5A1AB /* ExpoModulesProvider.swift in Sources */,
+				FA174800FART00000000001 /* FartSoundManager.swift in Sources */,
+				FA174800FART00000000002 /* FartSoundModule.swift in Sources */,
+				FA174800FART00000000003 /* FartSoundModule.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
