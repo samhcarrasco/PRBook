@@ -5,15 +5,20 @@ import {
 } from 'react-native';
 import { useAppTheme } from '../../context/themecontext';
 import { PROVIDER_LIST } from '../../services/ai-providers';
-import { saveApiKey, saveOAuthTokens } from '../../services/ai-key-storage';
+import { saveApiKey, saveOAuthTokens, clearCredentials } from '../../services/ai-key-storage';
 import { signInWithGoogle } from '../../services/ai-oauth';
-import { sendMessage } from '../../services/ai-chat-service';
+import { validateCredential } from '../../services/ai-chat-service';
 
 const PROVIDER_NOTES = {
   openai: {
     text: 'API access is billed separately from ChatGPT Plus. Generate a key at platform.openai.com and set a monthly spend limit before use.',
     url: 'https://platform.openai.com/api-keys',
     linkText: 'Open OpenAI Platform',
+  },
+  deepseek: {
+    text: 'DeepSeek uses API keys for direct access. Generate a key in the DeepSeek platform, then save it here. Your key stays in the device keychain.',
+    url: 'https://platform.deepseek.com/api_keys',
+    linkText: 'Open DeepSeek Platform',
   },
   anthropic: {
     text: 'API access is billed separately from Claude.ai Pro. Generate a key at console.anthropic.com and set a monthly spend limit before use.',
@@ -26,7 +31,7 @@ export default function SetupView({ onSetupComplete }) {
   const { theme } = useAppTheme();
   const c = theme.custom.colors;
 
-  const [selectedProvider, setSelectedProvider] = useState('openai');
+  const [selectedProvider, setSelectedProvider] = useState('deepseek');
   const [useApiKey, setUseApiKey] = useState(false);
   const [apiKeyInput, setApiKeyInput] = useState('');
   const [savedKeyMask, setSavedKeyMask] = useState(null);
@@ -59,17 +64,14 @@ export default function SetupView({ onSetupComplete }) {
     }
     setLoading(true);
     try {
-      // Verify key with a minimal test call
+      await validateCredential(selectedProvider, trimmed);
       await saveApiKey(selectedProvider, trimmed);
-      await sendMessage([{ role: 'user', content: 'Hi' }]);
       setSavedKeyMask('••••••••' + trimmed.slice(-4));
       setApiKeyInput('');
       onSetupComplete();
     } catch (e) {
-      setError('Could not verify key. Check it and try again.');
-      // Clear the bad key from storage
+      setError(e.message || 'Could not verify key. Check it and try again.');
       try {
-        const { clearCredentials } = require('../../services/ai-key-storage');
         await clearCredentials();
       } catch (_) {}
     } finally {
@@ -86,11 +88,10 @@ export default function SetupView({ onSetupComplete }) {
       keyboardShouldPersistTaps="handled"
     >
       <Text style={[styles.title, { color: c.textPrimary }]}>Connect AI Provider</Text>
-      <Text style={[styles.subtitle, { color: c.textSecondary }]}>
+      <Text style={[styles.subtitle, { color: c.textSecondary }]}> 
         Your credentials are stored securely in the device keychain.
       </Text>
 
-      {/* Provider picker */}
       <View style={styles.providerRow}>
         {PROVIDER_LIST.map(p => (
           <TouchableOpacity
@@ -105,6 +106,7 @@ export default function SetupView({ onSetupComplete }) {
               setUseApiKey(false);
               setError(null);
               setApiKeyInput('');
+              setSavedKeyMask(null);
             }}
           >
             <Text
@@ -119,7 +121,6 @@ export default function SetupView({ onSetupComplete }) {
         ))}
       </View>
 
-      {/* Note for API-key-only providers */}
       {note && (
         <View style={[styles.noteBox, { backgroundColor: c.surfaceVariant, borderColor: c.border }]}>
           <Text style={[styles.noteText, { color: c.textSecondary }]}>{note.text}</Text>
@@ -129,7 +130,6 @@ export default function SetupView({ onSetupComplete }) {
         </View>
       )}
 
-      {/* OAuth button */}
       {provider.supportsOAuth && !useApiKey && (
         <>
           <TouchableOpacity
@@ -149,7 +149,6 @@ export default function SetupView({ onSetupComplete }) {
         </>
       )}
 
-      {/* API key input */}
       {showApiKeyInput && (
         <>
           {savedKeyMask ? (
@@ -278,12 +277,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
-  btnDisabled: {
-    opacity: 0.5,
-  },
   errorText: {
-    fontSize: 14,
-    textAlign: 'center',
+    fontSize: 13,
+    lineHeight: 19,
     marginTop: 8,
+  },
+  btnDisabled: {
+    opacity: 0.65,
   },
 });

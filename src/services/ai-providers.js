@@ -12,7 +12,23 @@ export const PROVIDERS = {
       },
       body: { model: 'gpt-4o-mini', messages, max_tokens: 1024 },
     }),
-    parseResponse: (data) => data.choices[0].message.content,
+    parseResponse: (data) => data.choices?.[0]?.message?.content,
+  },
+
+  deepseek: {
+    id: 'deepseek',
+    label: 'DeepSeek',
+    supportsOAuth: false,
+    defaultModel: 'deepseek-chat',
+    buildRequest: (messages, apiKey) => ({
+      url: 'https://api.deepseek.com/chat/completions',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: { model: 'deepseek-chat', messages, max_tokens: 1024 },
+    }),
+    parseResponse: (data) => data.choices?.[0]?.message?.content,
   },
 
   anthropic: {
@@ -33,7 +49,7 @@ export const PROVIDERS = {
         body: { model: 'claude-haiku-4-5-20251001', system, messages: chat, max_tokens: 1024 },
       };
     },
-    parseResponse: (data) => data.content[0].text,
+    parseResponse: (data) => data.content?.[0]?.text,
   },
 
   gemini: {
@@ -65,7 +81,7 @@ export const PROVIDERS = {
         },
       };
     },
-    parseResponse: (data) => data.candidates[0].content.parts[0].text,
+    parseResponse: (data) => data.candidates?.[0]?.content?.parts?.[0]?.text,
   },
 };
 

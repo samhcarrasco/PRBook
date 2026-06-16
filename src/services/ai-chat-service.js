@@ -17,9 +17,11 @@ const getValidCredential = async () => {
   return { providerId: creds.providerId, credential: creds.apiKey };
 };
 
-export const sendMessage = async (messages) => {
-  const { providerId, credential } = await getValidCredential();
+const performProviderRequest = async (providerId, credential, messages) => {
   const provider = PROVIDERS[providerId];
+  if (!provider) throw new Error('Unsupported AI provider.');
+  if (!credential) throw new Error('Missing credentials.');
+
   const request = provider.buildRequest(messages, credential);
 
   const response = await fetch(request.url, {
@@ -29,9 +31,28 @@ export const sendMessage = async (messages) => {
   });
 
   if (!response.ok) {
-    throw new Error(`Request failed (${response.status})`);
+    let detail = '';
+    try {
+      const data = await response.json();
+      detail = data?.error?.message || data?.message || '';
+    } catch (_) {}
+
+    const suffix = detail ? `: ${detail}` : '';
+    throw new Error(`Request failed (${response.status})${suffix}`);
   }
 
   const data = await response.json();
-  return provider.parseResponse(data);
+  const parsed = provider.parseResponse(data);
+  if (!parsed) throw new Error('Provider returned an empty response.');
+  return parsed;
+};
+
+export const validateCredential = async (providerId, credential) => {
+  await performProviderRequest(providerId, credential, [{ role: 'user', content: 'Reply with exactly: OK' }]);
+  return true;
+};
+
+export const sendMessage = async (messages) => {
+  const { providerId, credential } = await getValidCredential();
+  return performProviderRequest(providerId, credential, messages);
 };
