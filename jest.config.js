@@ -1,8 +1,11 @@
 module.exports = {
-  preset: 'jest-expo',
+  testEnvironment: 'node',
   testMatch: ['**/__tests__/**/*.test.js'],
+  transform: {
+    '^.+\\.js$': 'babel-jest',
+  },
   setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
-  transformIgnorePatterns: [
-    'node_modules/(?!(react-native|@react-native|expo(nent)?|@expo(nent)?/.*|expo-.*|@expo/.*|@react-navigation/.*)/)',
-  ],
+  moduleNameMapper: {
+    '^react-native$': '<rootDir>/__tests__/mocks/react-native.js',
+  },
 };

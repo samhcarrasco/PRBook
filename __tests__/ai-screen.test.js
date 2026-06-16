@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';
+import TestRenderer, { act } from 'react-test-renderer';
 import AIScreen from '../src/screens/ai-screen';
 
 jest.mock('../src/context/themecontext', () => ({
@@ -29,17 +29,15 @@ jest.mock('../src/services/ai-key-storage', () => ({
 
 jest.mock('../src/components/ai/setup-view', () => {
   const React = require('react');
-  const { Text } = require('react-native');
   return function MockSetupView() {
-    return React.createElement(Text, null, 'Setup View');
+    return React.createElement('Text', null, 'Setup View');
   };
 });
 
 jest.mock('../src/components/ai/chat-view', () => {
   const React = require('react');
-  const { Text } = require('react-native');
   return function MockChatView() {
-    return React.createElement(Text, null, 'Chat View');
+    return React.createElement('Text', null, 'Chat View');
   };
 });
 
@@ -53,6 +51,8 @@ jest.mock('expo-local-authentication', () => ({
 const { hasCredentials } = require('../src/services/ai-key-storage');
 const LocalAuthentication = require('expo-local-authentication');
 
+const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+
 describe('AIScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -65,11 +65,14 @@ describe('AIScreen', () => {
     LocalAuthentication.authenticateAsync.mockResolvedValue({ success: true });
     hasCredentials.mockResolvedValue(false);
 
-    render(<AIScreen isActive />);
-
-    await waitFor(() => {
-      expect(screen.getByText('Setup View')).toBeTruthy();
+    let tree;
+    await act(async () => {
+      tree = TestRenderer.create(<AIScreen isActive />);
+      await flush();
+      await flush();
     });
+
+    expect(tree.root.findByType('Text').props.children).toBe('Setup View');
   });
 
   it('shows locked state when authentication is cancelled', async () => {
@@ -78,12 +81,16 @@ describe('AIScreen', () => {
     LocalAuthentication.isEnrolledAsync.mockResolvedValue(true);
     LocalAuthentication.authenticateAsync.mockResolvedValue({ success: false, error: 'user_cancel' });
 
-    render(<AIScreen isActive />);
-
-    await waitFor(() => {
-      expect(screen.getByText('Unlock AI')).toBeTruthy();
-      expect(screen.getByText('Unlock canceled.')).toBeTruthy();
+    let tree;
+    await act(async () => {
+      tree = TestRenderer.create(<AIScreen isActive />);
+      await flush();
+      await flush();
     });
+
+    const textNodes = tree.root.findAllByType('Text').map((node) => node.props.children);
+    expect(textNodes).toContain('Unlock AI');
+    expect(textNodes).toContain('Unlock canceled.');
   });
 
   it('retries unlock when the unlock button is pressed', async () => {
@@ -95,16 +102,21 @@ describe('AIScreen', () => {
       .mockResolvedValueOnce({ success: true });
     hasCredentials.mockResolvedValue(true);
 
-    render(<AIScreen isActive />);
-
-    await waitFor(() => {
-      expect(screen.getByText('Unlock with Face ID')).toBeTruthy();
+    let tree;
+    await act(async () => {
+      tree = TestRenderer.create(<AIScreen isActive />);
+      await flush();
+      await flush();
     });
 
-    fireEvent.press(screen.getByText('Unlock with Face ID'));
+    const button = tree.root.findByType('TouchableOpacity');
 
-    await waitFor(() => {
-      expect(screen.getByText('Chat View')).toBeTruthy();
+    await act(async () => {
+      button.props.onPress();
+      await flush();
+      await flush();
     });
+
+    expect(tree.root.findByType('Text').props.children).toBe('Chat View');
   });
 });
