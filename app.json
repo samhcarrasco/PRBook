@@ -54,9 +54,18 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
+    "scheme": "prbook",
     "plugins": [
       "expo-sqlite",
-      "expo-document-picker"
+      "expo-document-picker",
+      "expo-secure-store",
+      "expo-web-browser",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "PRBook uses Face ID to protect your AI tab."
+        }
+      ]
     ],
     "extra": {
       "eas": {
