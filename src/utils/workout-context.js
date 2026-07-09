@@ -1,6 +1,6 @@
 import { dataOperations, prOperations } from '../db/db';
 
-const CONTEXT_DAYS = 60;
+const CONTEXT_DAYS = 30;
 
 const sanitizeText = (text) =>
   String(text).replace(/[<>]/g, '').trim();

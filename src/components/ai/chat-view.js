@@ -96,6 +96,9 @@ export default function ChatView({ db, onChangeAccount }) {
             <Text style={[styles.emptyText, { color: c.textTertiary }]}>
               Ask me about your workouts, progress, or training advice.
             </Text>
+            <Text style={[styles.emptyHint, { color: c.textTertiary }]}>
+              I only see your last 30 days of workouts and current PRs.
+            </Text>
           </View>
         }
       />
@@ -169,6 +172,13 @@ const styles = StyleSheet.create({
     fontSize: 15,
     textAlign: 'center',
     lineHeight: 22,
+  },
+  emptyHint: {
+    fontSize: 13,
+    textAlign: 'center',
+    lineHeight: 18,
+    marginTop: 12,
+    opacity: 0.75,
   },
   errorBanner: {
     marginHorizontal: 16,

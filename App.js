@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { StatusBar, AppState } from 'react-native';
-import { PaperProvider, BottomNavigation } from 'react-native-paper';
+import { PaperProvider, BottomNavigation, Icon } from 'react-native-paper';
 import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { WorkoutProvider } from './src/context/workoutcontext';
@@ -9,6 +9,7 @@ import { initDatabase } from './src/db/db';
 import WorkoutScreen from './src/screens/workout-screen';
 import HistoryScreen from './src/screens/history-screen';
 import AIScreen from './src/screens/ai-screen';
+import BrainMuscleIcon from './src/components/ui/brain-muscle-icon';
 
 function AppContent() {
   const { theme, isDark } = useAppTheme();
@@ -19,8 +20,16 @@ function AppContent() {
   const [routes] = useState([
     { key: 'workout', title: 'Workout', focusedIcon: 'dumbbell',   unfocusedIcon: 'dumbbell' },
     { key: 'history', title: 'History', focusedIcon: 'chart-line', unfocusedIcon: 'chart-line' },
-    { key: 'ai',      title: 'AI',      focusedIcon: 'robot',      unfocusedIcon: 'robot-outline' },
+    { key: 'ai',      title: 'AI',      focusedIcon: 'brain',      unfocusedIcon: 'brain' },
   ]);
+
+  const renderIcon = ({ route, focused, color }) => {
+    if (route.key === 'ai') {
+      return <BrainMuscleIcon size={24} color={color} />;
+    }
+    const name = focused ? route.focusedIcon : route.unfocusedIcon;
+    return <Icon source={name} size={24} color={color} />;
+  };
 
   useEffect(() => {
     const setupDatabase = async () => {
@@ -87,6 +96,7 @@ function AppContent() {
           navigationState={{ index, routes }}
           onIndexChange={handleIndexChange}
           renderScene={renderScene}
+          renderIcon={renderIcon}
           barStyle={{ backgroundColor: c.surface, borderTopWidth: 1, borderTopColor: c.border }}
           activeColor={c.primary}
           inactiveColor={c.textTertiary}

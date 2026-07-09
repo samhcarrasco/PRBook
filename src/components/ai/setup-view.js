@@ -5,23 +5,19 @@ import {
 } from 'react-native';
 import { useAppTheme } from '../../context/themecontext';
 import { PROVIDER_LIST } from '../../services/ai-providers';
-import { saveApiKey, saveOAuthTokens, clearCredentials } from '../../services/ai-key-storage';
-import { signInWithGoogle } from '../../services/ai-oauth';
+import { saveApiKey, clearCredentials } from '../../services/ai-key-storage';
 import { validateCredential } from '../../services/ai-chat-service';
 
+const SUPPORTED_PROVIDER_IDS = ['deepseek', 'anthropic'];
+
 const PROVIDER_NOTES = {
-  openai: {
-    text: 'API access is billed separately from ChatGPT Plus. Generate a key at platform.openai.com and set a monthly spend limit before use.',
-    url: 'https://platform.openai.com/api-keys',
-    linkText: 'Open OpenAI Platform',
-  },
   deepseek: {
-    text: 'DeepSeek uses API keys for direct access. Generate a key in the DeepSeek platform, then save it here. Your key stays in the device keychain.',
+    text: 'DeepSeek uses API keys for direct access. Generate a key on the DeepSeek platform, then paste it here. Your key stays in the device keychain.',
     url: 'https://platform.deepseek.com/api_keys',
     linkText: 'Open DeepSeek Platform',
   },
   anthropic: {
-    text: 'API access is billed separately from Claude.ai Pro. Generate a key at console.anthropic.com and set a monthly spend limit before use.',
+    text: 'API access is billed separately from Claude.ai Pro. Generate a key at console.anthropic.com and set a monthly spend limit before use. Your key stays in the device keychain.',
     url: 'https://console.anthropic.com/',
     linkText: 'Open Anthropic Console',
   },
@@ -32,28 +28,13 @@ export default function SetupView({ onSetupComplete }) {
   const c = theme.custom.colors;
 
   const [selectedProvider, setSelectedProvider] = useState('deepseek');
-  const [useApiKey, setUseApiKey] = useState(false);
   const [apiKeyInput, setApiKeyInput] = useState('');
   const [savedKeyMask, setSavedKeyMask] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  const provider = PROVIDER_LIST.find(p => p.id === selectedProvider);
+  const providerOptions = PROVIDER_LIST.filter(p => SUPPORTED_PROVIDER_IDS.includes(p.id));
   const note = PROVIDER_NOTES[selectedProvider];
-
-  const handleGoogleSignIn = async () => {
-    setError(null);
-    setLoading(true);
-    try {
-      const { accessToken, refreshToken, expiresIn } = await signInWithGoogle();
-      await saveOAuthTokens('gemini', accessToken, refreshToken, expiresIn);
-      onSetupComplete();
-    } catch (e) {
-      setError('Google sign-in failed. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleSaveApiKey = async () => {
     setError(null);
@@ -79,8 +60,6 @@ export default function SetupView({ onSetupComplete }) {
     }
   };
 
-  const showApiKeyInput = useApiKey || !provider.supportsOAuth;
-
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: c.background }}
@@ -93,7 +72,7 @@ export default function SetupView({ onSetupComplete }) {
       </Text>
 
       <View style={styles.providerRow}>
-        {PROVIDER_LIST.map(p => (
+        {providerOptions.map(p => (
           <TouchableOpacity
             key={p.id}
             style={[
@@ -103,7 +82,6 @@ export default function SetupView({ onSetupComplete }) {
             ]}
             onPress={() => {
               setSelectedProvider(p.id);
-              setUseApiKey(false);
               setError(null);
               setApiKeyInput('');
               setSavedKeyMask(null);
@@ -130,58 +108,35 @@ export default function SetupView({ onSetupComplete }) {
         </View>
       )}
 
-      {provider.supportsOAuth && !useApiKey && (
+      {savedKeyMask ? (
+        <View style={[styles.savedKeyRow, { backgroundColor: c.surfaceVariant, borderColor: c.border }]}>
+          <Text style={[styles.savedKeyText, { color: c.textSecondary }]}>Key saved: {savedKeyMask}</Text>
+        </View>
+      ) : (
         <>
+          <TextInput
+            style={[
+              styles.keyInput,
+              { backgroundColor: c.inputBg, borderColor: c.border, color: c.textPrimary },
+            ]}
+            placeholder="Paste API key..."
+            placeholderTextColor={c.textTertiary}
+            secureTextEntry
+            autoCapitalize="none"
+            autoCorrect={false}
+            value={apiKeyInput}
+            onChangeText={setApiKeyInput}
+          />
           <TouchableOpacity
             style={[styles.primaryBtn, { backgroundColor: c.primary }, loading && styles.btnDisabled]}
-            onPress={handleGoogleSignIn}
+            onPress={handleSaveApiKey}
             disabled={loading}
           >
             {loading
               ? <ActivityIndicator color="#fff" />
-              : <Text style={styles.primaryBtnText}>Sign in with Google</Text>
+              : <Text style={styles.primaryBtnText}>Save & Verify</Text>
             }
           </TouchableOpacity>
-
-          <TouchableOpacity onPress={() => setUseApiKey(true)} style={styles.secondaryBtn}>
-            <Text style={[styles.secondaryBtnText, { color: c.textSecondary }]}>Use API key instead</Text>
-          </TouchableOpacity>
-        </>
-      )}
-
-      {showApiKeyInput && (
-        <>
-          {savedKeyMask ? (
-            <View style={[styles.savedKeyRow, { backgroundColor: c.surfaceVariant, borderColor: c.border }]}>
-              <Text style={[styles.savedKeyText, { color: c.textSecondary }]}>Key saved: {savedKeyMask}</Text>
-            </View>
-          ) : (
-            <>
-              <TextInput
-                style={[
-                  styles.keyInput,
-                  { backgroundColor: c.inputBg, borderColor: c.border, color: c.textPrimary },
-                ]}
-                placeholder="Paste API key..."
-                placeholderTextColor={c.textTertiary}
-                secureTextEntry
-                autoCapitalize="none"
-                autoCorrect={false}
-                value={apiKeyInput}
-                onChangeText={setApiKeyInput}
-              />
-              <TouchableOpacity
-                style={[styles.primaryBtn, { backgroundColor: c.primary }, loading && styles.btnDisabled]}
-                onPress={handleSaveApiKey}
-                disabled={loading}
-              >
-                {loading
-                  ? <ActivityIndicator color="#fff" />
-                  : <Text style={styles.primaryBtnText}>Save & Verify</Text>
-                }
-              </TouchableOpacity>
-            </>
-          )}
         </>
       )}
 
