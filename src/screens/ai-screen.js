@@ -16,7 +16,7 @@ export default function AIScreen({ isActive }) {
   const [isUnlocked, setIsUnlocked] = useState(false);
   const [authChecked, setAuthChecked] = useState(false);
   const [authError, setAuthError] = useState(null);
-  const [biometricState, setBiometricState] = useState({ supported: true, enrolled: true });
+  const [hasBiometrics, setHasBiometrics] = useState(true);
 
   useEffect(() => {
     openDB().then(setDb).catch(() => {});
@@ -37,16 +37,8 @@ export default function AIScreen({ isActive }) {
         LocalAuthentication.isEnrolledAsync(),
       ]);
 
-      const supportsBiometric = hasHardware && supportedTypes.length > 0;
-      setBiometricState({ supported: supportsBiometric, enrolled: isEnrolled });
-
-      if (!supportsBiometric || !isEnrolled) {
-        setAuthError('Face ID or device authentication is not set up on this device.');
-        setIsUnlocked(false);
-        setCredentialed(null);
-        setAuthChecked(true);
-        return;
-      }
+      // Face ID is the default when available; otherwise iOS falls back to the device passcode.
+      setHasBiometrics(hasHardware && supportedTypes.length > 0 && isEnrolled);
 
       const result = await LocalAuthentication.authenticateAsync({
         promptMessage: 'Unlock AI tab',
@@ -61,7 +53,13 @@ export default function AIScreen({ isActive }) {
       } else {
         setIsUnlocked(false);
         setCredentialed(null);
-        setAuthError(result.error === 'user_cancel' ? 'Unlock canceled.' : 'Could not verify your identity.');
+        if (result.error === 'user_cancel') {
+          setAuthError('Unlock canceled.');
+        } else if (result.error === 'passcode_not_set') {
+          setAuthError('Set a device passcode or Face ID in iPhone settings to use the AI tab.');
+        } else {
+          setAuthError('Could not verify your identity.');
+        }
       }
     } catch (_) {
       setIsUnlocked(false);
@@ -77,9 +75,11 @@ export default function AIScreen({ isActive }) {
     if (!isUnlocked) authenticate();
   }, [isActive, isUnlocked, authenticate]);
 
+  // Re-lock only on full background. The system passcode/Face ID sheet puts the
+  // app in 'inactive', which must not wipe the unlock mid-authentication.
   useEffect(() => {
     const sub = AppState.addEventListener('change', (nextState) => {
-      if (nextState !== 'active') {
+      if (nextState === 'background') {
         setIsUnlocked(false);
         setCredentialed(null);
         setAuthChecked(false);
@@ -105,15 +105,16 @@ export default function AIScreen({ isActive }) {
 
   if (!isUnlocked) {
     return (
-      <View style={[styles.lockedContainer, { backgroundColor: c.background }]}> 
+      <View style={[styles.lockedContainer, { backgroundColor: c.background }]}>
         <Text style={[styles.lockTitle, { color: c.textPrimary }]}>Unlock AI</Text>
-        <Text style={[styles.lockSubtitle, { color: c.textSecondary }]}>Face ID protects your AI conversations and saved API credentials.</Text>
+        <Text style={[styles.lockSubtitle, { color: c.textSecondary }]}>
+          {hasBiometrics
+            ? 'Face ID protects your AI conversations and saved API credentials.'
+            : 'Your device passcode protects your AI conversations and saved API credentials.'}
+        </Text>
         {!!authError && <Text style={[styles.errorText, { color: c.destructive }]}>{authError}</Text>}
-        {!biometricState.supported || !biometricState.enrolled ? (
-          <Text style={[styles.helpText, { color: c.textSecondary }]}>Enable Face ID or device authentication in iPhone settings to use the AI tab.</Text>
-        ) : null}
         <TouchableOpacity style={[styles.unlockButton, { backgroundColor: c.primary }]} onPress={authenticate}>
-          <Text style={styles.unlockButtonText}>Unlock with Face ID</Text>
+          <Text style={styles.unlockButtonText}>{hasBiometrics ? 'Unlock with Face ID' : 'Unlock with Passcode'}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -141,12 +142,6 @@ const styles = StyleSheet.create({
   lockSubtitle: {
     fontSize: 15,
     lineHeight: 22,
-    textAlign: 'center',
-    marginBottom: 16,
-  },
-  helpText: {
-    fontSize: 14,
-    lineHeight: 20,
     textAlign: 'center',
     marginBottom: 16,
   },

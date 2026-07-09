@@ -93,6 +93,41 @@ describe('AIScreen', () => {
     expect(textNodes).toContain('Unlock canceled.');
   });
 
+  it('falls back to passcode auth when biometrics are not enrolled', async () => {
+    LocalAuthentication.hasHardwareAsync.mockResolvedValue(true);
+    LocalAuthentication.supportedAuthenticationTypesAsync.mockResolvedValue([1]);
+    LocalAuthentication.isEnrolledAsync.mockResolvedValue(false);
+    LocalAuthentication.authenticateAsync.mockResolvedValue({ success: true });
+    hasCredentials.mockResolvedValue(true);
+
+    let tree;
+    await act(async () => {
+      tree = TestRenderer.create(<AIScreen isActive />);
+      await flush();
+      await flush();
+    });
+
+    expect(LocalAuthentication.authenticateAsync).toHaveBeenCalled();
+    expect(tree.root.findByType('Text').props.children).toBe('Chat View');
+  });
+
+  it('shows passcode unlock button when biometrics are unavailable and auth is cancelled', async () => {
+    LocalAuthentication.hasHardwareAsync.mockResolvedValue(false);
+    LocalAuthentication.supportedAuthenticationTypesAsync.mockResolvedValue([]);
+    LocalAuthentication.isEnrolledAsync.mockResolvedValue(false);
+    LocalAuthentication.authenticateAsync.mockResolvedValue({ success: false, error: 'user_cancel' });
+
+    let tree;
+    await act(async () => {
+      tree = TestRenderer.create(<AIScreen isActive />);
+      await flush();
+      await flush();
+    });
+
+    const textNodes = tree.root.findAllByType('Text').map((node) => node.props.children);
+    expect(textNodes).toContain('Unlock with Passcode');
+  });
+
   it('retries unlock when the unlock button is pressed', async () => {
     LocalAuthentication.hasHardwareAsync.mockResolvedValue(true);
     LocalAuthentication.supportedAuthenticationTypesAsync.mockResolvedValue([1]);

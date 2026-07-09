@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { StatusBar, AppState } from 'react-native';
 import { PaperProvider, BottomNavigation, Icon } from 'react-native-paper';
 import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import * as LocalAuthentication from 'expo-local-authentication';
 import { WorkoutProvider } from './src/context/workoutcontext';
 import { ThemeProvider, useAppTheme } from './src/context/themecontext';
 import { initDatabase } from './src/db/db';
@@ -16,7 +15,6 @@ function AppContent() {
   const c = theme.custom.colors;
   const insets = useSafeAreaInsets();
   const [index, setIndex] = useState(0);
-  const [isAIUnlocked, setIsAIUnlocked] = useState(false);
   const [routes] = useState([
     { key: 'workout', title: 'Workout', focusedIcon: 'dumbbell',   unfocusedIcon: 'dumbbell' },
     { key: 'history', title: 'History', focusedIcon: 'chart-line', unfocusedIcon: 'chart-line' },
@@ -42,11 +40,11 @@ function AppContent() {
     setupDatabase();
   }, []);
 
-  // Re-lock AI tab when app goes to background
+  // Leave AI tab when app is fully backgrounded; AIScreen handles its own re-lock.
+  // 'inactive' is excluded — the system passcode/Face ID sheet triggers it mid-unlock.
   useEffect(() => {
     const sub = AppState.addEventListener('change', (nextState) => {
-      if (nextState === 'background' || nextState === 'inactive') {
-        setIsAIUnlocked(false);
+      if (nextState === 'background') {
         setIndex(prev => {
           if (routes[prev]?.key === 'ai') return 0;
           return prev;
@@ -55,22 +53,6 @@ function AppContent() {
     });
     return () => sub.remove();
   }, [routes]);
-
-  const handleIndexChange = async (newIndex) => {
-    if (routes[newIndex].key === 'ai' && !isAIUnlocked) {
-      const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: 'Authenticate to access AI',
-        fallbackLabel: 'Use Passcode',
-        disableDeviceFallback: false,
-      });
-      if (result.success) {
-        setIsAIUnlocked(true);
-        setIndex(newIndex);
-      }
-      return;
-    }
-    setIndex(newIndex);
-  };
 
   const renderScene = ({ route }) => {
     switch (route.key) {
@@ -94,7 +76,7 @@ function AppContent() {
         />
         <BottomNavigation
           navigationState={{ index, routes }}
-          onIndexChange={handleIndexChange}
+          onIndexChange={setIndex}
           renderScene={renderScene}
           renderIcon={renderIcon}
           barStyle={{ backgroundColor: c.surface, borderTopWidth: 1, borderTopColor: c.border }}

@@ -58,4 +58,46 @@ describe('ai-chat-service', () => {
   it('rejects unsupported providers', async () => {
     await expect(validateCredential('bogus', 'whatever')).rejects.toThrow('Unsupported AI provider.');
   });
+
+  it('sends messages with the stored model', async () => {
+    getCredentials.mockResolvedValue({
+      method: 'apikey',
+      providerId: 'deepseek',
+      apiKey: 'deepseek-key',
+      model: 'deepseek-reasoner',
+    });
+
+    global.fetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: 'reasoned reply' } }],
+      }),
+    });
+
+    await sendMessage([{ role: 'user', content: 'hello' }]);
+
+    const body = JSON.parse(global.fetch.mock.calls[0][1].body);
+    expect(body.model).toBe('deepseek-reasoner');
+  });
+
+  it('falls back to the provider default model when none is stored', async () => {
+    getCredentials.mockResolvedValue({
+      method: 'apikey',
+      providerId: 'deepseek',
+      apiKey: 'deepseek-key',
+      model: null,
+    });
+
+    global.fetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: 'reply' } }],
+      }),
+    });
+
+    await sendMessage([{ role: 'user', content: 'hello' }]);
+
+    const body = JSON.parse(global.fetch.mock.calls[0][1].body);
+    expect(body.model).toBe('deepseek-chat');
+  });
 });

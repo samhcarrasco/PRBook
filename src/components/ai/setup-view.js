@@ -8,7 +8,7 @@ import { PROVIDER_LIST } from '../../services/ai-providers';
 import { saveApiKey, clearCredentials } from '../../services/ai-key-storage';
 import { validateCredential } from '../../services/ai-chat-service';
 
-const SUPPORTED_PROVIDER_IDS = ['deepseek', 'anthropic'];
+const SUPPORTED_PROVIDER_IDS = ['deepseek', 'anthropic', 'gemini'];
 
 const PROVIDER_NOTES = {
   deepseek: {
@@ -21,6 +21,11 @@ const PROVIDER_NOTES = {
     url: 'https://console.anthropic.com/',
     linkText: 'Open Anthropic Console',
   },
+  gemini: {
+    text: 'Generate a free Gemini API key in Google AI Studio, then paste it here. Your key stays in the device keychain.',
+    url: 'https://aistudio.google.com/apikey',
+    linkText: 'Open Google AI Studio',
+  },
 };
 
 export default function SetupView({ onSetupComplete }) {
@@ -28,12 +33,14 @@ export default function SetupView({ onSetupComplete }) {
   const c = theme.custom.colors;
 
   const [selectedProvider, setSelectedProvider] = useState('deepseek');
+  const [selectedModel, setSelectedModel] = useState(PROVIDER_LIST.find(p => p.id === 'deepseek').defaultModel);
   const [apiKeyInput, setApiKeyInput] = useState('');
   const [savedKeyMask, setSavedKeyMask] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
   const providerOptions = PROVIDER_LIST.filter(p => SUPPORTED_PROVIDER_IDS.includes(p.id));
+  const provider = PROVIDER_LIST.find(p => p.id === selectedProvider);
   const note = PROVIDER_NOTES[selectedProvider];
 
   const handleSaveApiKey = async () => {
@@ -45,8 +52,8 @@ export default function SetupView({ onSetupComplete }) {
     }
     setLoading(true);
     try {
-      await validateCredential(selectedProvider, trimmed);
-      await saveApiKey(selectedProvider, trimmed);
+      await validateCredential(selectedProvider, trimmed, selectedModel);
+      await saveApiKey(selectedProvider, trimmed, selectedModel);
       setSavedKeyMask('••••••••' + trimmed.slice(-4));
       setApiKeyInput('');
       onSetupComplete();
@@ -82,6 +89,7 @@ export default function SetupView({ onSetupComplete }) {
             ]}
             onPress={() => {
               setSelectedProvider(p.id);
+              setSelectedModel(p.defaultModel);
               setError(null);
               setApiKeyInput('');
               setSavedKeyMask(null);
@@ -107,6 +115,30 @@ export default function SetupView({ onSetupComplete }) {
           </TouchableOpacity>
         </View>
       )}
+
+      <Text style={[styles.sectionLabel, { color: c.textSecondary }]}>Model</Text>
+      <View style={styles.providerRow}>
+        {(provider.models || []).map(m => (
+          <TouchableOpacity
+            key={m.id}
+            style={[
+              styles.providerChip,
+              { borderColor: c.border, backgroundColor: c.surface },
+              selectedModel === m.id && { borderColor: c.primary, backgroundColor: c.primaryContainer },
+            ]}
+            onPress={() => setSelectedModel(m.id)}
+          >
+            <Text
+              style={[
+                styles.providerChipText,
+                { color: selectedModel === m.id ? c.textPrimary : c.textSecondary },
+              ]}
+            >
+              {m.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
 
       {savedKeyMask ? (
         <View style={[styles.savedKeyRow, { backgroundColor: c.surfaceVariant, borderColor: c.border }]}>
@@ -167,6 +199,13 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 10,
     marginBottom: 24,
+  },
+  sectionLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 10,
   },
   providerChip: {
     paddingHorizontal: 16,

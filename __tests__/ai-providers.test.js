@@ -28,4 +28,33 @@ describe('ai-providers', () => {
 
     expect(text).toBe('Claude reply');
   });
+
+  it('uses the selected model when provided', () => {
+    const request = PROVIDERS.anthropic.buildRequest(
+      [{ role: 'user', content: 'hello' }],
+      'claude-key',
+      'claude-opus-4-8'
+    );
+
+    expect(request.body.model).toBe('claude-opus-4-8');
+  });
+
+  it('builds a Gemini API-key request with the selected model', () => {
+    const request = PROVIDERS.gemini.buildRequest(
+      [{ role: 'user', content: 'hello' }],
+      'gemini-key',
+      'gemini-2.5-pro'
+    );
+
+    expect(request.url).toBe(
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=gemini-key'
+    );
+    expect(request.headers.Authorization).toBeUndefined();
+  });
+
+  it('every provider lists models including its default', () => {
+    for (const provider of Object.values(PROVIDERS)) {
+      expect(provider.models.map(m => m.id)).toContain(provider.defaultModel);
+    }
+  });
 });
